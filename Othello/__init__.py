@@ -220,14 +220,14 @@ class OthelloGame:
         for direction_squares in OthelloGame.get_all_directions_squares(board_size, row, col):
             row, col = next(direction_squares, (None, None))
             if row and col and board[row, col, opponent_channel]:
-                flip_squares = np.array([(row, col)], dtype=np.uint8)
+                flip_squares = [(row, col)]
                 for row, col in direction_squares:
                     if OthelloGame.is_board_square_free(board, row, col):
                         break
                     elif board[row, col, OthelloGame.PLAYER_CHANNELS[player]]:
                         yield from flip_squares
                     else:
-                        flip_squares = np.append(flip_squares, [(row, col)], axis=0)
+                        flip_squares.append((row, col))
 
     @staticmethod
     def flip_board_squares(board, player, row, col):

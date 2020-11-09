@@ -10,8 +10,8 @@ class BoardView(Enum):
 
 # Representation of the player in one-channel board view
 class OthelloPlayer(Enum):
-    BLACK = -1
-    WHITE = 1
+    BLACK = 1
+    WHITE = -1
     
     @property
     def opponent(self):
@@ -173,7 +173,7 @@ class OthelloGame:
     def initial_board(board_size):
         assert board_size % 2 == 0, 'Board size must be even'
         
-        initial = np.array([[[0, 1], [1, 0]], [[1, 0], [0, 1]]], dtype=np.int8)
+        initial = np.array([[[0, 1], [1, 0]], [[1, 0], [0, 1]]], dtype=np.bool)
         pad = (board_size - 2) // 2
 
         return np.pad(initial, ((pad, pad), (pad, pad), (0, 0)), constant_values=0)
@@ -263,6 +263,11 @@ class OthelloGame:
         one_channel = board[:, :, OthelloGame.PLAYER_CHANNELS[OthelloPlayer.BLACK]] * OthelloPlayer.BLACK.value
         one_channel += board[:, :, OthelloGame.PLAYER_CHANNELS[OthelloPlayer.WHITE]] * OthelloPlayer.WHITE.value
         return one_channel
+
+    @staticmethod
+    def invert_board(board):
+        return np.flip(board, axis=2)
+
 
 if __name__ == '__main__':
     game = OthelloGame(board_size=8)

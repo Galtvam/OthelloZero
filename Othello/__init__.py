@@ -26,12 +26,12 @@ class OthelloGame:
 
     ALL_DIRECTIONS = np.array([(1, 1), (1, 0), (1, -1), (0, -1), (-1, -1), (-1, 0), (-1, 1), (0, 1)])
 
-    def __init__(self, initial_board=None, board_size=8, current_player=OthelloPlayer.BLACK):
+    def __init__(self, board_size=8, initial_board=None, current_player=OthelloPlayer.BLACK):
         """Create Othello board game representation
 
         Args:
-            initial_board (ndrray(board_size, board_size, 2)): Initial board
             board_size ([int]): Size of the board square (4, 6, 8)
+            initial_board (ndrray(board_size, board_size, 2)): Initial board
         """
         assert board_size % 2 == 0, 'Board size must be even'
 

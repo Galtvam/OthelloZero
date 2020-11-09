@@ -152,6 +152,22 @@ class OthelloGame:
 
             if not can_previous_player_play:
                 self._has_finished = True
+    
+    def get_players_points(self):
+        """Get players points
+
+        Returns:
+            [dict]: Points of each player
+        """
+        return OthelloGame.get_board_players_points(self._board)
+    
+    def get_winning_player(self):
+        """Get winning player 
+
+        Returns:
+            [tuple]: ([OthelloPlayer], [int] Player points)
+        """
+        return OthelloGame.get_board_winning_player(self._board)
 
     @staticmethod
     def initial_board(board_size):
@@ -229,6 +245,14 @@ class OthelloGame:
     def has_board_finished(board):
         can_black_play = OthelloGame.has_player_actions_on_board(OthelloPlayer.BLACK)
         return not can_black_play and not OthelloGame.has_player_actions_on_board(OthelloPlayer.WHITE)
+
+    @staticmethod
+    def get_board_winning_player(board):
+        return max(OthelloGame.get_board_players_points(board).items(), key=lambda item: item[1])
+    
+    @staticmethod
+    def get_board_players_points(board):
+        return {p: np.count_nonzero(board[:, :, OthelloGame.PLAYER_CHANNELS[p]]) for p in OthelloPlayer}
 
     @staticmethod
     def has_player_actions_on_board(board, player):

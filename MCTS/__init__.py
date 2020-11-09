@@ -12,6 +12,14 @@ class MCTS:
         self.degree_explorarion = degree_explorarion
     
     def simulate(self, state):
+        """Run an iteration of Monte Carlo Tree Search algorithm from a state
+
+        Args:
+            state ([ndarray]): State
+
+        Returns:
+            [float]: Simluated state value
+        """
         if self.is_terminal_state(state):
             return self.get_state_reward(state)
 
@@ -33,25 +41,84 @@ class MCTS:
             return value
     
     def N(self, state, action=None):
+        """Get number of visits during MCTS simulations
+
+        Args:
+            state ([ndarray]): State
+            action ([Any], optional): Action. Defaults to None.
+
+        Returns:
+            [int]: Number of visits to the state (and action)
+        """
         hash_ = MCTS._hash_ndarray(state)
         return self._N(state, action)
     
     def is_terminal_state(self, state):
+        """Check if the state is terminal
+
+        Args:
+            state ([ndarray]): State
+        
+        Returns:
+            [bool]: True if the state is terminal, otherwise False.
+        """
         raise NotImplementedError
 
     def get_state_value(self, state):
+        """Get default state value
+
+        Args:
+            state ([ndarray]): State
+        
+        Returns:
+            [float]: Default state value.
+        """
         raise NotImplementedError
 
     def get_state_reward(self, state):
+        """Get state reward
+
+        Args:
+            state ([ndarray]): Terminal state
+        
+        Returns:
+            [float]: Terminal state reward.
+        """
         raise NotImplementedError
 
     def get_state_actions_propabilities(self, state):
+        """Get value of probabilities of all state's actions
+
+        Args:
+            state ([ndarray]): State
+            action ([Any]): Action
+        
+        Returns:
+            [dict]: Dictionary mapping actions to their probabilities
+        """
         raise NotImplementedError
     
     def get_state_actions(self, state):
+        """Get state's actions
+
+        Args:
+            state ([ndarray]): State
+        
+        Returns:
+            [list]: State's actions
+        """
         raise NotImplementedError
     
     def get_next_state(self, state, action):
+        """Get next state from state and action
+
+        Args:
+            state ([ndarray]): State
+            action ([Any]): Action
+        
+        Returns:
+            [ndarray]: Next state from the state and the action
+        """
         raise NotImplementedError
 
     def _upper_confidence_bound(self, hash_, action):

@@ -38,7 +38,10 @@ class OthelloGame:
         assert initial_board is None or initial_board.shape == (board_size, board_size, 2), \
             f'Expecting initial board shape ({board_size}, {board_size}, 2)'
 
-        self._board = initial_board or self.initial_board(board_size)
+        if initial_board is not None:
+            self._board = initial_board
+        else:
+            self._board = self.initial_board(board_size)
         self._board_size = board_size
         self._round = 1
 
@@ -50,7 +53,7 @@ class OthelloGame:
         self._one_channel_board_last_update = None
         self._one_channel_board = None
 
-        if initial_board:
+        if initial_board is not None:
             self._has_finished = OthelloGame.has_board_finished(self._board)
         else:
             self._has_finished = False
@@ -218,9 +221,9 @@ class OthelloGame:
         opponent_channel = OthelloGame.PLAYER_CHANNELS[player.opponent]
 
         for direction_squares in OthelloGame.get_all_directions_squares(board_size, row, col):
-            row, col = next(direction_squares, (None, None))
-            if row and col and board[row, col, opponent_channel]:
-                flip_squares = [(row, col)]
+            row_col = next(direction_squares, None)
+            if row_col and board[row_col[0], row_col[1], opponent_channel]:
+                flip_squares = [row_col]
                 for row, col in direction_squares:
                     if OthelloGame.is_board_square_free(board, row, col):
                         break
@@ -243,8 +246,8 @@ class OthelloGame:
     
     @staticmethod
     def has_board_finished(board):
-        can_black_play = OthelloGame.has_player_actions_on_board(OthelloPlayer.BLACK)
-        return not can_black_play and not OthelloGame.has_player_actions_on_board(OthelloPlayer.WHITE)
+        can_black_play = OthelloGame.has_player_actions_on_board(board, OthelloPlayer.BLACK)
+        return not can_black_play and not OthelloGame.has_player_actions_on_board(board, OthelloPlayer.WHITE)
 
     @staticmethod
     def get_board_winning_player(board):
@@ -273,5 +276,3 @@ if __name__ == '__main__':
     game = OthelloGame(board_size=8)
     board = game.board(view=BoardView.ONE_CHANNEL)
     print(board)
-    game.play(5, 4)
-    print(game.board())

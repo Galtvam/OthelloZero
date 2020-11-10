@@ -2,12 +2,26 @@ import math
 import hashlib
 
 
+def hash_ndarray(ndarray):
+    """Generate hash to a ndarray
+
+    Args:
+        ndarray ([ndarray]): Numpy Array
+
+    Returns:
+        [int]: Hash of the numpy array
+    """
+    return hash(hashlib.sha1(ndarray).digest())
+
+
 class MCTS:
     def __init__(self, degree_explorarion):
         self._Ns = {}
         self._Nsa = {}
         self._Qsa = {}
         self._Psa = {}
+
+        self._state_actions = {}
 
         self.degree_explorarion = degree_explorarion
     
@@ -23,7 +37,7 @@ class MCTS:
         if self.is_terminal_state(state):
             return self.get_state_reward(state)
 
-        hash_ = MCTS._hash_ndarray(state)
+        hash_ = hash_ndarray(state)
 
         if hash_ not in self._Ns:
             self._Ns[hash_] = 0
@@ -32,7 +46,7 @@ class MCTS:
             self._Ps[hash_] = self.get_state_actions_propabilities(state)
             return self.get_state_value(state)
         else:
-            action = max(self.get_state_actions(state), key=lambda a: self._upper_confidence_bound(hash_, a))
+            action = max(self._get_state_actions(state), key=lambda a: self._upper_confidence_bound(hash_, a))
             next_state = self.get_next_state(state, action)
             value = self.simulate(next_state)
             self._Qsa[hash_][action] = (self._N(hash_, action) * self._Q(hash_, action) + value) / (self._N(hash_, action) + 1)
@@ -50,7 +64,7 @@ class MCTS:
         Returns:
             [int]: Number of visits to the state (and action)
         """
-        hash_ = MCTS._hash_ndarray(state)
+        hash_ = hash_ndarray(state)
         return self._N(state, action)
     
     def is_terminal_state(self, state):
@@ -125,15 +139,17 @@ class MCTS:
         bound = math.sqrt(self._N(hash_)) / (1 + self._N(hash_, action))
         return self._Q(hash_, action) + self.degree_explorarion * self._P(hash_, action) * bound
     
-    def _N(self, hash_, action=None):
-        return self._Ns[hash_] if action is None else self._Nsa[state][action]
+    def _N(self, state_hash, action=None):
+        return self._Ns[state_hash] if action is None else self._Nsa[state_hash][action]
     
-    def _P(self, hash_, action):
-        return self._Psa[hash_][action]
+    def _P(self, state_hash, action):
+        return self._Psa[state_hash][action]
     
-    def _Q(self, hash_, action):
-        return self._Qsa[hash_][action]
-    
-    @staticmethod
-    def _hash_ndarray(ndarray):
-        return hash(hashlib.sha1(ndarray).digest())
+    def _Q(self, state_hash, action):
+        return self._Qsa[state_hash][action]
+
+    def _get_state_actions(self, state):
+        hash_ = hash_ndarray(state)
+        if state_hash not in self._state_actions:
+            self._state_actions[hash_] = self.get_state_actions(state)
+        return self._state_actions[hash_]

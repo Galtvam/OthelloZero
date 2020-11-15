@@ -5,7 +5,7 @@ Imports
 import numpy as np
 import os
 
-from OthelloNN import OthelloNN as onn
+from .OthelloNN import OthelloNN as onn
 
 
 """

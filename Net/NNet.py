@@ -11,7 +11,7 @@ from .OthelloNN import OthelloNN as onn
 """
 Wrapper
 """
-class NNetWrapper():
+class NNetWrapper:
     def __init__(self, board_size=(8,8), batch_size=32, epochs=10):
         '''
         Inputs:

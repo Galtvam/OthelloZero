@@ -1,9 +1,16 @@
+# -*- coding: utf-8 -*-
+"""
+Imports
+"""
 import numpy as np
 import os
 
 from OthelloNN import OthelloNN as onn
 
 
+"""
+Wrapper
+"""
 class NNetWrapper():
     def __init__(self, board_size=(8,8), batch_size=32, epochs=10):
         '''
@@ -48,15 +55,15 @@ class NNetWrapper():
 
 
     # save weights
-    def save_checkpoint(self, folder='checkpoint', filename='checkpoint.pth.tar'):
+    def save_checkpoint(self, folder='checkpoint', filename='model_weights.h5'):
         filepath = os.path.join(folder, filename)
         if not os.path.exists(folder):
             os.mkdir(folder)
         self.nnet.model.save_weights(filepath)
 
     # load saved weights
-    def load_checkpoint(self, folder='checkpoint', filename='checkpoint.pth.tar'):
+    def load_checkpoint(self, folder='checkpoint', filename='model_weights.h5'):
         filepath = os.path.join(folder, filename)
         if not os.path.exists(filepath):
-            raise("No model in path {}".format(filepath))
+            raise Exception("No model in path {}".format(filepath))
         self.nnet.model.load_weights(filepath)

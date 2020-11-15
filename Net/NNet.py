@@ -55,14 +55,16 @@ class NNetWrapper():
 
 
     # save weights
-    def save_checkpoint(self, folder='checkpoint', filename='model_weights.h5'):
+    def save_checkpoint(self, folder='checkpoint'):
+        filename = "{}_weights.h5".format(str(self.nnet))
         filepath = os.path.join(folder, filename)
         if not os.path.exists(folder):
             os.mkdir(folder)
         self.nnet.model.save_weights(filepath)
 
     # load saved weights
-    def load_checkpoint(self, folder='checkpoint', filename='model_weights.h5'):
+    def load_checkpoint(self, folder='checkpoint'):
+        filename = "{}_weights.h5".format(str(self.nnet))
         filepath = os.path.join(folder, filename)
         if not os.path.exists(filepath):
             raise Exception("No model in path {}".format(filepath))

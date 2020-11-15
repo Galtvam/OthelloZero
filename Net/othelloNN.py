@@ -62,3 +62,6 @@ class OthelloNN:
 
     self.model = Model(inputs=self.input_boards, outputs=[self.pi, self.v])
     self.model.compile(loss=['categorical_crossentropy','mean_squared_error'], optimizer=Adam(self.learning_rate))
+    
+  def __str__(self):
+    return "modelo_(2-1-2-1)"

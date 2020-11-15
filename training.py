@@ -19,13 +19,13 @@ class OthelloMCTS(MCTS):
         return OthelloGame.has_board_finished(state)
     
     def get_state_value(self, state):
-        return self._neural_network_predict(state)[1][0]
+        return self._neural_network_predict(state)[1]
 
     def get_state_reward(self, state):
         return OthelloGame.get_board_winning_player(state)[0].value
 
     def get_state_actions_propabilities(self, state):
-        return self._neural_network_predict(state)[0].reshape((self._board_size, self._board_size))
+        return self._neural_network_predict(state)
     
     def get_state_actions(self, state):
         return [tuple(a) for a in OthelloGame.get_player_valid_actions(state, OthelloPlayer.BLACK)]
@@ -94,6 +94,26 @@ def execute_episode(board_size, neural_network, degree_exploration, num_simulati
     return [(state, policy, 1 if winner == player else -1) for state, policy, player in examples]
 
 
+def duel_between_neural_networks(board_size, neural_network_1, neural_network_2):
+    game = OthelloGame(board_size)
+
+    players_neural_networks = {
+        OthelloPlayer.BLACK: neural_network_1,
+        OthelloPlayer.WHITE: neural_network_2
+    }
+
+    while not game.has_finished():
+        nn = players_neural_networks[game.current_player]
+        action_probabilities, state_value = nn.predict(game.board(BoardView.TWO_CHANNELS))
+        valid_actions = game.get_valid_actions()
+        best_action = max(valid_actions, key=lambda position: action_probabilities[tuple(position)])
+        game.play(*best_action)
+        print(game.board())
+
+    return game.get_winning_player()[0]    
+
+
 if __name__ == '__main__':
     nn = NNetWrapper((8, 8))
-    execute_episode(8, nn, 1, 25, 1)
+    nn2 = NNetWrapper((8, 8))
+    print(duel_between_neural_networks(8, nn, nn2))

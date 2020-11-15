@@ -51,7 +51,8 @@ class NNetWrapper:
         '''
         board = board[np.newaxis, :, :, :]
         pi, v = self.nnet.model.predict(board)
-        return pi[0], v[0]
+        pi = pi.reshape(self.board_size_x, self.board_size_y)
+        return pi, v[0][0]
 
 
     # save weights

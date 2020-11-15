@@ -259,7 +259,7 @@ class OthelloGame:
 
     @staticmethod
     def has_player_actions_on_board(board, player):
-        return next(OthelloGame.get_player_valid_actions(board, OthelloPlayer.BLACK), False) is not False
+        return next(OthelloGame.get_player_valid_actions(board, player), False) is not False
 
     @staticmethod
     def convert_to_one_channel_board(board):

@@ -52,9 +52,9 @@ class OthelloMCTS(MCTS):
             for action in self._get_state_actions(state):
                 row, col = action
                 probabilities[row, col] = self.N(state, action)
-            bests = np.argwhere(probabilities[row, col] == probabilities.max())
+            bests = np.argwhere(probabilities == probabilities.max())
             row, col = random.choice(bests)
-            probabilities = np.zeros((self._board_size, self.board_size))
+            probabilities = np.zeros((self._board_size, self._board_size))
             probabilities[row, col] = 1
             return probabilities
 

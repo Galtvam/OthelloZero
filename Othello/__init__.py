@@ -155,6 +155,8 @@ class OthelloGame:
 
             if not can_previous_player_play:
                 self._has_finished = True
+            else:
+                self.current_player = self.current_player.opponent
     
     def get_players_points(self):
         """Get players points

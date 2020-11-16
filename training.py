@@ -1,10 +1,14 @@
-import argparse
 import random
+import logging
+import argparse
 import numpy as np
 
 from Net.NNet import NNetWrapper
 from MCTS import MCTS, hash_ndarray
 from Othello import OthelloGame, OthelloPlayer, BoardView
+
+LOG_FORMAT = '%(asctime)s %(levelname)s: %(message)s'
+DEFAULT_CHECKPOINT_FILEPATH = './othelo_model.weights'
 
 
 class OthelloMCTS(MCTS):
@@ -25,7 +29,7 @@ class OthelloMCTS(MCTS):
         return OthelloGame.get_board_winning_player(state)[0].value
 
     def get_state_actions_propabilities(self, state):
-        return self._neural_network_predict(state)
+        return self._neural_network_predict(state)[0]
     
     def get_state_actions(self, state):
         return [tuple(a) for a in OthelloGame.get_player_valid_actions(state, OthelloPlayer.BLACK)]
@@ -110,10 +114,90 @@ def duel_between_neural_networks(board_size, neural_network_1, neural_network_2)
         game.play(*best_action)
         print(game.board())
 
-    return game.get_winning_player()[0]    
+    return game.get_winning_player()[0]
 
+
+def training(board_size, num_iterations, num_episodes, num_simulations, degree_exploration, temperature,
+             total_games, victory_threshold, neural_network, temperature_threshold=None, 
+             checkpoint_filepath=None):
+    training_examples = []
+    for i in range(1, num_iterations + 1):
+        old_neural_network = neural_network.copy()
+        
+        logging.info(f'Iteration {i}/{num_iterations}: Starting iteration')
+        
+        if temperature_threshold and i >= temperature_threshold:
+            logging.info(f'Iteration {i}/{num_iterations}: Temperature threshold reached, '
+                          'changing temperature to 0')
+            temperature = 0
+
+        for e in range(1, num_episodes + 1):
+            logging.info(f'Iteration {i}/{num_iterations} - Episode {e}/{num_episodes}: Starting episode')
+            episode_examples = execute_episode(board_size, neural_network, degree_exploration, 
+                                               num_simulations, temperature)
+            training_examples.extend(episode_examples)
+        
+        training_verbose = 2 if logging.root.level == logging.DEBUG else None
+        neural_network.train(training_examples, verbose=training_verbose)
+
+        logging.info(f'Iteration {i}/{num_iterations}: Saving trained model in "{checkpoint_filepath}"')
+
+        neural_network.save_checkpoint(checkpoint_filepath)
+
+        logging.info(f'Iteration {i}/{num_iterations}: Self-play to evaluate the neural network training')
+
+        new_net_victories = 0
+        for g in range(1, total_games + 1):
+            logging.info(f'Iteration {i}/{num_iterations} - Game {g}/{total_games}: Starting match')
+            winner = duel_between_neural_networks(board_size, old_neural_network, neural_network)
+            if winner is neural_network:
+                logging.info(f'Iteration {i}/{num_iterations} - Game {g}/{total_games}: New neural network has won')
+                new_net_victories += 1
+            else:
+                logging.info(f'Iteration {i}/{num_iterations} - Game {g}/{total_games}: New neural network has lost')
+
+            logging.info(f'Iteration {i}/{num_iterations} - Game {g}/{total_games}: ' 
+                         f'Promotion status ({new_net_victories}/{victory_threshold})')
+
+        if new_net_victories >= victory_threshold:
+            logging.info(f'Iteration {i}/{num_iterations}: New neural network has been promoted')
+        else:
+            neural_network = old_neural_network
 
 if __name__ == '__main__':
-    nn = NNetWrapper((8, 8))
-    nn2 = NNetWrapper((8, 8))
-    print(duel_between_neural_networks(8, nn, nn2))
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-b', '--board-size', default=6, type=int, help='Othello board size')
+    parser.add_argument('-i', '--iterations', default=80, type=int, help='Number of training iterations')
+    parser.add_argument('-e', '--episodes', default=100, type=int, help='Number of episodes by iterations')
+    parser.add_argument('-s', '--simulations', default=25, type=int, help='Number of MCTS simulations by episode')
+    parser.add_argument('-g', '--total-games', default=10, type=int, help='Total of games to evaluate neural network training')
+    parser.add_argument('-v', '--victory-threshold', default=6, type=int, help='Number of victories to promote neural network training')
+    parser.add_argument('-c', '--constant-upper-confidence', default=1, type=int, help='MCTS upper confidence bound constant')
+
+    parser.add_argument('-ep', '--epochs', default=10, type=int, help='Number of epochs for neural network training')
+    parser.add_argument('-lr', '--learning-rate', default=0.001, type=float, help='Neural network training learning rate')
+    parser.add_argument('-dp', '--dropout', default=0.3, type=float, help='Neural network training dropout')
+    parser.add_argument('-bs', '--batch-size', default=32, type=int, help='Neural network training batch size')
+
+    parser.add_argument('-o', '--output-file', default=DEFAULT_CHECKPOINT_FILEPATH, help='File path to save neural network weights')
+    parser.add_argument('-w', '--weights-file', default=None, help='File path to load neural network weights')
+    parser.add_argument('-l', '--log-level', default='DEBUG', choices=('INFO', 'DEBUG', 'WARNING', 'ERROR'), help='Logging level')
+    parser.add_argument('-t', '--temperature', default=1, type=int, help='Policy temperature parameter')
+    parser.add_argument('-tt', '--temperature-threshold', default=25, type=int, help='Number of iterations using the temperature '
+                                                                                     'parameter before changing to 0')
+    
+    args = parser.parse_args()
+
+    assert args.victory_threshold < args.total_games, '"victory-threshold" must be less than "total-games"'
+
+    logging.basicConfig(level=getattr(logging, args.log_level, None), format=LOG_FORMAT)
+    
+    neural_network = NNetWrapper(board_size=(args.board_size, args.board_size), batch_size=args.batch_size,
+                                 epochs=args.epochs, lr=args.learning_rate, dropout=args.dropout)
+    if args.weights_file:
+        neural_network.load_checkpoint(args.weights_file)
+
+    training(args.board_size, args.iterations, args.episodes, args.simulations, 
+             args.constant_upper_confidence, args.temperature,  args.total_games, 
+             args.victory_threshold, neural_network, args.temperature_threshold, 
+             args.output_file)

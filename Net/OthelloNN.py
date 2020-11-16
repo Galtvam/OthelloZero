@@ -25,7 +25,7 @@ class OthelloNN:
 
     Outputs:
       self.model -> a Keras model with the NN
-      self.pi -> a vector of shape (batch_size x action_size) between [0,1]
+      self.pi -> a Matrix of shape (batch_size x board_x x board_x) between [0,1]
       self.v -> a vector of Scalars with shape (batch_size x 1) between [-1,1]
 
     '''
@@ -59,6 +59,7 @@ class OthelloNN:
     pi_dense1 = Dropout(self.dropout)(Activation('relu')(BatchNormalization(axis=1)(Dense(512, use_bias=False)(flatten)))) # shape (batch_size x 512)
     pi_dense2 = Dropout(self.dropout)(Activation('relu')(BatchNormalization(axis=1)(Dense(256, use_bias=False)(pi_dense1)))) # shape (batch_size x 256)
     self.pi = Dense(self.action_size, activation='softmax', name='pi')(pi_dense2) # shape (batch_size x action_size)
+    self.pi = Reshape((self.board_x, self.board_y))(self.pi)
 
     self.model = Model(inputs=self.input_boards, outputs=[self.pi, self.v])
     self.model.compile(loss=['categorical_crossentropy','mean_squared_error'], optimizer=Adam(self.learning_rate))

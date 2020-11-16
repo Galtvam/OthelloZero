@@ -2,6 +2,8 @@ import random
 import logging
 import argparse
 import numpy as np
+import concurrent.futures
+
 
 from Net.NNet import NNetWrapper
 from MCTS import MCTS, hash_ndarray
@@ -119,7 +121,7 @@ def duel_between_neural_networks(board_size, neural_network_1, neural_network_2)
 
 def training(board_size, num_iterations, num_episodes, num_simulations, degree_exploration, temperature,
              total_games, victory_threshold, neural_network, temperature_threshold=None, 
-             checkpoint_filepath=None):
+             checkpoint_filepath=None, episode_thread_pool=1, game_thread_pool=1):
     training_examples = []
     for i in range(1, num_iterations + 1):
         old_neural_network = neural_network.copy()
@@ -131,14 +133,32 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
                           'changing temperature to 0')
             temperature = 0
 
-        for e in range(1, num_episodes + 1):
-            logging.info(f'Iteration {i}/{num_iterations} - Episode {e}/{num_episodes}: Starting episode')
-            episode_examples = execute_episode(board_size, neural_network, degree_exploration, 
-                                               num_simulations, temperature)
-            training_examples.extend(episode_examples)
+        logging.info(f'Iteration {i}/{num_iterations} - Generating episodes')
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=episode_thread_pool) as executor:
+            future_results = {}
+            
+            for e in range(1, num_episodes + 1):
+                future_result = executor.submit(execute_episode, board_size, neural_network, degree_exploration, 
+                                                num_simulations, temperature)
+                future_results[future_result] = e
+
+            logging.info(f'Iteration {i}/{num_iterations} - Waiting for episodes results')
+
+            for future in concurrent.futures.as_completed(future_results):
+                e = future_results[future]
+                logging.info(f'Iteration {i}/{num_iterations} - Episode {e}: Finished')
+                episode_examples = future.result()
+                training_examples.extend(episode_examples)
+
+        logging.info(f'Iteration {i}/{num_iterations}: All episodes finished')
         
-        training_verbose = 2 if logging.root.level == logging.DEBUG else None
-        neural_network.train(training_examples, verbose=training_verbose)
+        training_verbose = 2 if logging.root.level <= logging.DEBUG else None
+
+        logging.info(f'Iteration {i}/{num_iterations}: Training model with episodes examples')
+        logging.debug(f'training_verbose={training_verbose}')
+
+        history = neural_network.train(training_examples, verbose=training_verbose)
 
         logging.info(f'Iteration {i}/{num_iterations}: Saving trained model in "{checkpoint_filepath}"')
 
@@ -147,17 +167,30 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
         logging.info(f'Iteration {i}/{num_iterations}: Self-play to evaluate the neural network training')
 
         new_net_victories = 0
-        for g in range(1, total_games + 1):
-            logging.info(f'Iteration {i}/{num_iterations} - Game {g}/{total_games}: Starting match')
-            winner = duel_between_neural_networks(board_size, old_neural_network, neural_network)
-            if winner is neural_network:
-                logging.info(f'Iteration {i}/{num_iterations} - Game {g}/{total_games}: New neural network has won')
-                new_net_victories += 1
-            else:
-                logging.info(f'Iteration {i}/{num_iterations} - Game {g}/{total_games}: New neural network has lost')
+        
+        logging.info(f'Iteration {i}/{num_iterations} - Generating matches')
 
-            logging.info(f'Iteration {i}/{num_iterations} - Game {g}/{total_games}: ' 
-                         f'Promotion status ({new_net_victories}/{victory_threshold})')
+        with concurrent.futures.ThreadPoolExecutor(max_workers=game_thread_pool) as executor:
+            future_results = {}
+            
+            for g in range(1, total_games + 1):
+                future_result = executor.submit(duel_between_neural_networks, board_size, 
+                                                old_neural_network, neural_network)
+                future_results[future_result] = g
+
+            logging.info(f'Iteration {i}/{num_iterations} - Waiting for matches results')
+
+            for future in concurrent.futures.as_completed(future_results):
+                g = future_results[future]
+                winner = future.result()
+                if winner is neural_network:
+                    logging.info(f'Iteration {i}/{num_iterations} - Game {g}/{total_games}: New neural network has won')
+                    new_net_victories += 1
+                else:
+                    logging.info(f'Iteration {i}/{num_iterations} - Game {g}/{total_games}: New neural network has lost')
+
+                logging.info(f'Iteration {i}/{num_iterations} - Game {g}/{total_games}: ' 
+                            f'Promotion status ({new_net_victories}/{victory_threshold})')
 
         if new_net_victories >= victory_threshold:
             logging.info(f'Iteration {i}/{num_iterations}: New neural network has been promoted')
@@ -178,6 +211,10 @@ if __name__ == '__main__':
     parser.add_argument('-lr', '--learning-rate', default=0.001, type=float, help='Neural network training learning rate')
     parser.add_argument('-dp', '--dropout', default=0.3, type=float, help='Neural network training dropout')
     parser.add_argument('-bs', '--batch-size', default=32, type=int, help='Neural network training batch size')
+    
+    parser.add_argument('-et', '--episode-threads', default=1, type=int, help='Number of episodes to be executed asynchronously')
+    parser.add_argument('-gt', '--game-threads', default=1, type=int, help='Number of games to be executed asynchronously '
+                                                                           'during evaluation')
 
     parser.add_argument('-o', '--output-file', default=DEFAULT_CHECKPOINT_FILEPATH, help='File path to save neural network weights')
     parser.add_argument('-w', '--weights-file', default=None, help='File path to load neural network weights')
@@ -200,4 +237,4 @@ if __name__ == '__main__':
     training(args.board_size, args.iterations, args.episodes, args.simulations, 
              args.constant_upper_confidence, args.temperature,  args.total_games, 
              args.victory_threshold, neural_network, args.temperature_threshold, 
-             args.output_file)
+             args.output_file, args.episode_threads, args.game_threads)

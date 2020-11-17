@@ -275,6 +275,48 @@ class OthelloGame:
 
 
 if __name__ == '__main__':
-    game = OthelloGame(board_size=8)
+    board = np.array([[[False,  True],
+        [False, False],
+        [False,  True],
+        [False,  True],
+        [False,  True],
+        [False,  True]],
+
+       [[False,  True],
+        [False,  True],
+        [ True, False],
+        [ True, False],
+        [ True, False],
+        [False,  True]],
+
+       [[False,  True],
+        [False,  True],
+        [ True, False],
+        [ True, False],
+        [ True, False],
+        [False,  True]],
+
+       [[False,  True],
+        [False, False],
+        [False,  True],
+        [False,  True],
+        [False,  True],
+        [False,  True]],
+
+       [[False, False],
+        [ True, False],
+        [ True, False],
+        [ True, False],
+        [ True, False],
+        [False,  True]],
+
+       [[False, False],
+        [ True, False],
+        [False, False],
+        [False, False],
+        [False, False],
+        [False, False]]])
+
+    game = OthelloGame(board_size=6, initial_board=board)
     board = game.board(view=BoardView.ONE_CHANNEL)
     print(board)

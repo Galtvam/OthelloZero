@@ -1,6 +1,7 @@
 import math
 import hashlib
 import numpy as np
+import logging
 
 
 def hash_ndarray(ndarray):
@@ -55,7 +56,7 @@ class MCTS:
             
             action = max(state_actions, key=lambda a: self._upper_confidence_bound(hash_, a))
             next_state = self.get_next_state(state, action)
-            value = self.simulate(next_state)
+            value = MCTS.simulate(self, next_state)
             self._Qsa[hash_][action] = (self._N(hash_, action) * self._Q(hash_, action) + value) / (self._N(hash_, action) + 1)
             self._Nsa[hash_][action] += 1
             self._Ns[hash_] += 1
@@ -144,17 +145,15 @@ class MCTS:
 
     def _upper_confidence_bound(self, hash_, action):
         bound = math.sqrt(self._N(hash_)) / (1 + self._N(hash_, action))
-        u = self._Q(hash_, action) + self.degree_explorarion * self._P(hash_, action) * bound
-        if isinstance(u, np.ndarray):
-            print('here')
-        return u
+        return self._Q(hash_, action) + self.degree_explorarion * self._P(hash_, action) * bound
     
     def _N(self, state_hash, action=None):
+        if state_hash not in self._Ns: 
+            return 0
         return self._Ns[state_hash] if action is None else self._Nsa[state_hash][action]
     
     def _P(self, state_hash, action):
-        p = self._Psa[state_hash][action]
-        return p
+        return self._Psa[state_hash][action]
     
     def _Q(self, state_hash, action):
         return self._Qsa[state_hash][action]

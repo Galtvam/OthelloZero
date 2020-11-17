@@ -13,7 +13,7 @@ Wrapper
 """
 class NNetWrapper:
     def __init__(self, board_size=(8,8), batch_size=32, epochs=10,
-                 num_channels_1=64, num_channels_2=128, lr=0.001, dropout=0.3):
+                 num_channels_1=128, num_channels_2=256, lr=0.001, dropout=0.3):
         '''
         Inputs:
           board_size -> a Tuple with the size of the board (n,n)

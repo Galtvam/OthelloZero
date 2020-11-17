@@ -9,7 +9,7 @@ from Net.NNet import NNetWrapper
 from MCTS import MCTS, hash_ndarray
 from Othello import OthelloGame, OthelloPlayer, BoardView
 
-LOG_FORMAT = '%(asctime)s %(levelname)s: %(message)s'
+LOG_FORMAT = '[%(threadName)s] %(asctime)s %(levelname)s: %(message)s'
 DEFAULT_CHECKPOINT_FILEPATH = './othelo_model.weights'
 
 
@@ -20,6 +20,12 @@ class OthelloMCTS(MCTS):
         self._predict_cache = {}
 
         super().__init__(degree_exploration)
+    
+    def simulate(self, state, player):
+        board = np.copy(state)
+        if player is OthelloPlayer.WHITE:
+            board = OthelloGame.invert_board(board)
+        return super().simulate(board)
     
     def is_terminal_state(self, state):
         return OthelloGame.has_board_finished(state)
@@ -38,11 +44,10 @@ class OthelloMCTS(MCTS):
     
     def get_next_state(self, state, action):
         board = np.copy(state)
-        next_state = OthelloGame.flip_board_squares(board, OthelloPlayer.BLACK, *action)
-
+        OthelloGame.flip_board_squares(board, OthelloPlayer.BLACK, *action)
         if OthelloGame.has_player_actions_on_board(board, OthelloPlayer.WHITE):
             # Invert board to keep using BLACK perspective
-            return OthelloGame.invert_board(board)
+            board = OthelloGame.invert_board(board)
         return board
 
     def get_policy_action_probabilities(self, state, temperature):
@@ -61,8 +66,7 @@ class OthelloMCTS(MCTS):
         for action in self._get_state_actions(state):
             row, col = action
             probabilities[row, col] = self.N(state, action) ** (1 / temperature)
-        
-        return probabilities / np.sum(probabilities)
+        return probabilities / (np.sum(probabilities) or 1)
 
     def _neural_network_predict(self, state):
         hash_ = hash_ndarray(state)
@@ -81,7 +85,7 @@ def execute_episode(board_size, neural_network, degree_exploration, num_simulati
     while not game.has_finished(): 
         state = game.board(BoardView.TWO_CHANNELS)
         for _ in range(num_simulations):
-            mcts.simulate(state)
+            mcts.simulate(state, game.current_player)
 
         policy = mcts.get_policy_action_probabilities(state, policy_temperature)
         
@@ -100,7 +104,7 @@ def execute_episode(board_size, neural_network, degree_exploration, num_simulati
     return [(state, policy, 1 if winner == player else -1) for state, policy, player in examples]
 
 
-def duel_between_neural_networks(board_size, neural_network_1, neural_network_2):
+def duel_between_neural_networks(board_size, neural_network_1, neural_network_2, degree_exploration, num_simulations):
     game = OthelloGame(board_size)
 
     players_neural_networks = {
@@ -108,22 +112,35 @@ def duel_between_neural_networks(board_size, neural_network_1, neural_network_2)
         OthelloPlayer.WHITE: neural_network_2
     }
 
+    neural_networks_mcts = {
+      neural_network_1 : OthelloMCTS(board_size, neural_network_1, degree_exploration),
+      neural_network_2 : OthelloMCTS(board_size, neural_network_2, degree_exploration)
+    }
+
     while not game.has_finished():
         nn = players_neural_networks[game.current_player]
-        action_probabilities, state_value = nn.predict(game.board(BoardView.TWO_CHANNELS))
+        state = game.board(BoardView.TWO_CHANNELS)
+
+        logging.info(f'Round: {game.round}')
+        for _ in range(num_simulations):
+            neural_networks_mcts[nn].simulate(state, game.current_player)
+
+        action_probabilities = neural_networks_mcts[nn].get_policy_action_probabilities(state, 0)
         valid_actions = game.get_valid_actions()
         best_action = max(valid_actions, key=lambda position: action_probabilities[tuple(position)])
         game.play(*best_action)
-        print(game.board())
+        
+    print(hash_ndarray(game.board(BoardView.TWO_CHANNELS)))
 
-    return game.get_winning_player()[0]
+    return players_neural_networks[game.get_winning_player()[0]]
 
 
 def training(board_size, num_iterations, num_episodes, num_simulations, degree_exploration, temperature,
              total_games, victory_threshold, neural_network, temperature_threshold=None, 
              checkpoint_filepath=None, episode_thread_pool=1, game_thread_pool=1):
-    training_examples = []
+
     for i in range(1, num_iterations + 1):
+        training_examples = []
         old_neural_network = neural_network.copy()
         
         logging.info(f'Iteration {i}/{num_iterations}: Starting iteration')
@@ -156,7 +173,6 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
         training_verbose = 2 if logging.root.level <= logging.DEBUG else None
 
         logging.info(f'Iteration {i}/{num_iterations}: Training model with episodes examples')
-        logging.debug(f'training_verbose={training_verbose}')
 
         history = neural_network.train(training_examples, verbose=training_verbose)
 
@@ -172,10 +188,13 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=game_thread_pool) as executor:
             future_results = {}
-            
+            neural_networks = [old_neural_network, neural_network]            
+
             for g in range(1, total_games + 1):
+                random.shuffle(neural_networks)
                 future_result = executor.submit(duel_between_neural_networks, board_size, 
-                                                old_neural_network, neural_network)
+                                                neural_networks[0], neural_networks[1],
+                                                degree_exploration, num_simulations)
                 future_results[future_result] = g
 
             logging.info(f'Iteration {i}/{num_iterations} - Waiting for matches results')
@@ -225,7 +244,7 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
 
-    assert args.victory_threshold < args.total_games, '"victory-threshold" must be less than "total-games"'
+    assert args.victory_threshold <= args.total_games, '"victory-threshold" must be less than "total-games"'
 
     logging.basicConfig(level=getattr(logging, args.log_level, None), format=LOG_FORMAT)
     

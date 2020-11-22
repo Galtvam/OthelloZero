@@ -155,6 +155,8 @@ class OthelloGame:
 
             if not can_previous_player_play:
                 self._has_finished = True
+            else:
+                self.current_player = self.current_player.opponent
     
     def get_players_points(self):
         """Get players points
@@ -259,7 +261,7 @@ class OthelloGame:
 
     @staticmethod
     def has_player_actions_on_board(board, player):
-        return next(OthelloGame.get_player_valid_actions(board, OthelloPlayer.BLACK), False) is not False
+        return next(OthelloGame.get_player_valid_actions(board, player), False) is not False
 
     @staticmethod
     def convert_to_one_channel_board(board):
@@ -273,6 +275,48 @@ class OthelloGame:
 
 
 if __name__ == '__main__':
-    game = OthelloGame(board_size=8)
+    board = np.array([[[False,  True],
+        [False, False],
+        [False,  True],
+        [False,  True],
+        [False,  True],
+        [False,  True]],
+
+       [[False,  True],
+        [False,  True],
+        [ True, False],
+        [ True, False],
+        [ True, False],
+        [False,  True]],
+
+       [[False,  True],
+        [False,  True],
+        [ True, False],
+        [ True, False],
+        [ True, False],
+        [False,  True]],
+
+       [[False,  True],
+        [False, False],
+        [False,  True],
+        [False,  True],
+        [False,  True],
+        [False,  True]],
+
+       [[False, False],
+        [ True, False],
+        [ True, False],
+        [ True, False],
+        [ True, False],
+        [False,  True]],
+
+       [[False, False],
+        [ True, False],
+        [False, False],
+        [False, False],
+        [False, False],
+        [False, False]]])
+
+    game = OthelloGame(board_size=6, initial_board=board)
     board = game.board(view=BoardView.ONE_CHANNEL)
     print(board)

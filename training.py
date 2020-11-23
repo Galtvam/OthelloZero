@@ -191,10 +191,6 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
 
         history = neural_network.train(training_examples, verbose=training_verbose)
 
-        logging.info(f'Iteration {i}/{num_iterations}: Saving trained model in "{checkpoint_filepath}"')
-
-        neural_network.save_checkpoint(checkpoint_filepath)
-
         logging.info(f'Iteration {i}/{num_iterations}: Self-play to evaluate the neural network training')
 
         new_net_victories = 0
@@ -228,6 +224,9 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
 
         if new_net_victories >= victory_threshold:
             logging.info(f'Iteration {i}/{num_iterations}: New neural network has been promoted')
+            
+            neural_network.save_checkpoint(checkpoint_filepath)
+            logging.info(f'Iteration {i}/{num_iterations}: Saving trained model in "{checkpoint_filepath}"')
         else:
             neural_network = old_neural_network
 

@@ -5,12 +5,12 @@ import numpy as np
 import concurrent.futures
 
 
-from Net.NNet import NNetWrapper
+from Net.NNet import NNetWrapper, NeuralNets
 from MCTS import MCTS, hash_ndarray
 from Othello import OthelloGame, OthelloPlayer, BoardView
 
 LOG_FORMAT = '[%(threadName)s] %(asctime)s %(levelname)s: %(message)s'
-DEFAULT_CHECKPOINT_FILEPATH = './othelo_model.weights'
+DEFAULT_CHECKPOINT_FILEPATH = './othelo_model_weights'
 
 
 class OthelloMCTS(MCTS):
@@ -18,6 +18,11 @@ class OthelloMCTS(MCTS):
         self._board_size = board_size
         self._neural_network = neural_network
         self._predict_cache = {}
+
+        if self._neural_network.network_type is NeuralNets.ONN:
+            self._board_view_type = BoardView.TWO_CHANNELS
+        elif self._neural_network.network_type is NeuralNets.BNN:
+            self._board_view_type = BoardView.ONE_CHANNEL
 
         super().__init__(degree_exploration)
     
@@ -71,6 +76,8 @@ class OthelloMCTS(MCTS):
     def _neural_network_predict(self, state):
         hash_ = hash_ndarray(state)
         if hash_ not in self._predict_cache:
+            if self._board_view_type == BoardView.ONE_CHANNEL:
+                state = OthelloGame.convert_to_one_channel_board(state)
             self._predict_cache[hash_] = self._neural_network.predict(state)
         return self._predict_cache[hash_]
 
@@ -82,6 +89,11 @@ def execute_episode(board_size, neural_network, degree_exploration, num_simulati
 
     mcts = OthelloMCTS(board_size, neural_network, degree_exploration)
 
+    if neural_network.network_type == NeuralNets.ONN:
+        board_view_type = BoardView.TWO_CHANNELS
+    elif neural_network.network_type == NeuralNets.BNN:
+        board_view_type = BoardView.ONE_CHANNEL
+
     while not game.has_finished(): 
         state = game.board(BoardView.TWO_CHANNELS)
         for _ in range(num_simulations):
@@ -92,7 +104,10 @@ def execute_episode(board_size, neural_network, degree_exploration, num_simulati
         if game.current_player == OthelloPlayer.WHITE:
             state = OthelloGame.invert_board(state)
 
-        example = state, policy, game.current_player
+        if board_view_type == BoardView.ONE_CHANNEL:
+            example = game.board(BoardView.ONE_CHANNEL), policy, game.current_player
+        else:
+            example = state, policy, game.current_player
         examples.append(example)
 
         action = np.argwhere(policy == policy.max())[0]
@@ -130,14 +145,14 @@ def duel_between_neural_networks(board_size, neural_network_1, neural_network_2,
         best_action = max(valid_actions, key=lambda position: action_probabilities[tuple(position)])
         game.play(*best_action)
         
-    print(hash_ndarray(game.board(BoardView.TWO_CHANNELS)))
+    #print(hash_ndarray(game.board(BoardView.TWO_CHANNELS)))
 
     return players_neural_networks[game.get_winning_player()[0]]
 
 
 def training(board_size, num_iterations, num_episodes, num_simulations, degree_exploration, temperature,
              total_games, victory_threshold, neural_network, temperature_threshold=None, 
-             checkpoint_filepath=None, episode_thread_pool=1, game_thread_pool=1):
+             checkpoint_filepath=None, episode_thread_pool=1, game_thread_pool=1, net_type=NeuralNets.ONN):
 
     for i in range(1, num_iterations + 1):
         training_examples = []
@@ -226,6 +241,8 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--victory-threshold', default=6, type=int, help='Number of victories to promote neural network training')
     parser.add_argument('-c', '--constant-upper-confidence', default=1, type=int, help='MCTS upper confidence bound constant')
 
+    parser.add_argument('-n', '--network-type', default=1, type=int, help='1- OthelloNN, 2- BaseNN')
+
     parser.add_argument('-ep', '--epochs', default=10, type=int, help='Number of epochs for neural network training')
     parser.add_argument('-lr', '--learning-rate', default=0.001, type=float, help='Neural network training learning rate')
     parser.add_argument('-dp', '--dropout', default=0.3, type=float, help='Neural network training dropout')
@@ -247,13 +264,15 @@ if __name__ == '__main__':
     assert args.victory_threshold <= args.total_games, '"victory-threshold" must be less than "total-games"'
 
     logging.basicConfig(level=getattr(logging, args.log_level, None), format=LOG_FORMAT)
+
+    net_type = NeuralNets.ONN if args.network_type == 1 else NeuralNets.BNN
     
     neural_network = NNetWrapper(board_size=(args.board_size, args.board_size), batch_size=args.batch_size,
-                                 epochs=args.epochs, lr=args.learning_rate, dropout=args.dropout)
+                                 epochs=args.epochs, lr=args.learning_rate, dropout=args.dropout, network=net_type)
     if args.weights_file:
         neural_network.load_checkpoint(args.weights_file)
 
     training(args.board_size, args.iterations, args.episodes, args.simulations, 
              args.constant_upper_confidence, args.temperature,  args.total_games, 
              args.victory_threshold, neural_network, args.temperature_threshold, 
-             args.output_file, args.episode_threads, args.game_threads)
+             args.output_file, args.episode_threads, args.game_threads, args.network_type)

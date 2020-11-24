@@ -8,6 +8,7 @@ import concurrent.futures
 from Net.NNet import NNetWrapper, NeuralNets
 from MCTS import MCTS, hash_ndarray
 from Othello import OthelloGame, OthelloPlayer, BoardView
+from Othello.random_agent import *
 
 LOG_FORMAT = '[%(threadName)s] %(asctime)s %(levelname)s: %(message)s'
 DEFAULT_CHECKPOINT_FILEPATH = './othelo_model_weights'
@@ -61,7 +62,7 @@ class OthelloMCTS(MCTS):
         if temperature == 0:
             for action in self._get_state_actions(state):
                 row, col = action
-                probabilities[row, col] = self.N(state, action)
+                probabilities[row, col] = self.N(state, action) ** (1 / (temperature + 10**-2))
             bests = np.argwhere(probabilities == probabilities.max())
             row, col = random.choice(bests)
             probabilities = np.zeros((self._board_size, self._board_size))
@@ -144,16 +145,34 @@ def duel_between_neural_networks(board_size, neural_network_1, neural_network_2,
         valid_actions = game.get_valid_actions()
         best_action = max(valid_actions, key=lambda position: action_probabilities[tuple(position)])
         game.play(*best_action)
-        
-    #print(hash_ndarray(game.board(BoardView.TWO_CHANNELS)))
 
     return players_neural_networks[game.get_winning_player()[0]]
+
+
+def machine_move(game, neural_networks_mcts, num_simulations):
+    '''
+    Makes the movement of the machine according to the policy already known
+    '''
+
+    state = game.board(BoardView.TWO_CHANNELS)
+    for _ in range(num_simulations):
+        neural_networks_mcts.simulate(state, game.current_player)
+
+    action_probabilities = neural_networks_mcts.get_policy_action_probabilities(state, 0)
+    if game.current_player == OthelloPlayer.WHITE:
+        state = OthelloGame.invert_board(state)
+
+    valid_actions = game.get_valid_actions()
+    best_action = max(valid_actions, key=lambda position: action_probabilities[tuple(position)])
+    game.play(*best_action)
 
 
 def training(board_size, num_iterations, num_episodes, num_simulations, degree_exploration, temperature,
              total_games, victory_threshold, neural_network, temperature_threshold=None, 
              checkpoint_filepath=None, episode_thread_pool=1, game_thread_pool=1, net_type=NeuralNets.ONN):
 
+    total_episodes_done = 0
+    historic = []
     for i in range(1, num_iterations + 1):
         training_examples = []
         old_neural_network = neural_network.copy()
@@ -171,6 +190,7 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
             future_results = {}
             
             for e in range(1, num_episodes + 1):
+                total_episodes_done += 1
                 future_result = executor.submit(execute_episode, board_size, neural_network, degree_exploration, 
                                                 num_simulations, temperature)
                 future_results[future_result] = e
@@ -229,6 +249,42 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
             logging.info(f'Iteration {i}/{num_iterations}: Saving trained model in "{checkpoint_filepath}"')
         else:
             neural_network = old_neural_network
+
+        if i % 15 == 0:
+            color = [OthelloPlayer.BLACK, OthelloPlayer.WHITE]
+            net_wins = 0
+
+            for k in range(50):
+                random.shuffle(color)
+                game = OthelloGame(board_size, current_player = OthelloPlayer.BLACK)
+                neural_networks_mcts = OthelloMCTS(board_size, neural_network, degree_exploration=1)
+
+                while not game.has_finished():
+                    #neural network move
+                    if game.current_player is color[0]:
+                        machine_move(game, neural_networks_mcts, num_simulations)
+
+                    #random agent move
+                    else:
+                        random_agent(game)
+                
+                winner, points = game.get_winning_player()       
+                print (f'O jogador {winner} ganhou com {points} pontos')
+                
+                if winner == color[0]:
+                    net_wins += 1
+                    logging.info(f'Total Episodes Runned: {total_episodes_done} - Network won: {net_wins}/{k+1}')
+                else:
+                    logging.info(f'Total Episodes Runned: {total_episodes_done} - Network lost: {net_wins}/{k+1}')
+            
+            historic.append( (total_episodes_done, (net_wins/50)) )
+            logging.info(historic)
+
+            with open(f'historic-last-training-session-{board_size}.txt', 'w') as output:
+                output.write(str(historic))
+
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)

@@ -37,7 +37,7 @@ class MCTS:
             [float]: Simluated state value
         """
         if self.is_terminal_state(state):
-            return self.get_state_reward(state)
+            return -self.get_state_reward(state)
 
         hash_ = hash_ndarray(state)
 
@@ -45,8 +45,16 @@ class MCTS:
             self._Ns[hash_] = 0
             self._Nsa[hash_] = {}
             self._Qsa[hash_] = {} 
-            self._Psa[hash_] = self.get_state_actions_propabilities(state)
-            return self.get_state_value(state)
+            self._Psa[hash_] = self.moves_scaled_by_valid_moves(state)
+            sum_Psa = np.sum(self._Psa[hash_])
+            if np.sum(self._Psa[hash_]) > 0:
+                self._Psa[hash_] /= sum_Psa
+            else:
+                logging.warning("All valid moves were masked, doing a workaround.")
+                self._Psa[hash_] = self._mask_valid_moves(state)
+                self._Psa[hash_] /= np.sum(self._Psa[hash_])
+
+            return -self.get_state_value(state)
         else:
             state_actions = self._get_state_actions(state)
             
@@ -141,6 +149,20 @@ class MCTS:
         Returns:
             [ndarray]: Next state from the state and the action
         """
+        raise NotImplementedError
+
+    def moves_scaled_by_valid_moves(self, state):
+        """Get moves with probabilities scaled by valid moves
+
+        Args:
+            state ([ndarray]): State
+        
+        Returns:
+            [matrix]: Matrix with action probabilities
+        """
+        raise NotImplementedError
+    
+    def _mask_valid_moves(self, state):
         raise NotImplementedError
 
     def _upper_confidence_bound(self, hash_, action):

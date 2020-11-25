@@ -47,9 +47,10 @@ def machine_move(game, neural_networks_mcts, num_simulations):
     for _ in range(num_simulations):
         neural_networks_mcts.simulate(state, game.current_player)
 
-    action_probabilities = neural_networks_mcts.get_policy_action_probabilities(state, 0)
     if game.current_player == OthelloPlayer.WHITE:
         state = OthelloGame.invert_board(state)
+        
+    action_probabilities = neural_networks_mcts.get_policy_action_probabilities(state, 0)
 
     valid_actions = game.get_valid_actions()
     best_action = max(valid_actions, key=lambda position: action_probabilities[tuple(position)])

@@ -1,2 +1,5 @@
 .vscode/
 __pycache__/
+
+# Ignore trained weights file
+*.h5

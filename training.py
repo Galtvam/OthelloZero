@@ -151,7 +151,7 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
         random.shuffle(training_examples)
         history = neural_network.train(training_examples, verbose=training_verbose)
 
-        if self_play_training and i % self_play_interval == 0:
+        if(self_play_training and i % self_play_interval == 0:
             logging.info(f'Iteration {i}/{num_iterations}: Self-play to evaluate the neural network training')
             
             new_net_victories = 0
@@ -190,7 +190,7 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
                 logging.info(f'Iteration {i}/{num_iterations}: Saving trained model in "{checkpoint_filepath}"')
             else:
                 neural_network = old_neural_network
-        else:
+        elif self_play_interval == 0:
             neural_network.save_checkpoint(checkpoint_filepath)
 
         if i % evaluation_interval == 0:

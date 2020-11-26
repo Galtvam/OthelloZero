@@ -18,7 +18,7 @@ class OthelloAgent:
 
 class RandomOthelloAgent(OthelloAgent):
     def play(self):
-        possible_moves = self.game.get_valid_actions()
+        possible_moves = tuple(self.game.get_valid_actions())
         move = random.choice(possible_moves)
         self.game.play(*move)
 
@@ -56,6 +56,7 @@ def duel_between_agents(game, agent_1, agent_2):
         OthelloPlayer.WHITE: agent_2
     }
 
+    logging.info(f'Duel - Started')
     while not game.has_finished():
         logging.info(f'Duel - Round: {game.round}')
         agent = players_agents[game.current_player]

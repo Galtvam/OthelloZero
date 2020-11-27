@@ -1,3 +1,4 @@
+[![license](https://img.shields.io/github/license/mashape/apistatus.svg)](https://https://github.com/Galtvam/OthelloZero/blob/master/LICENSE)
 # OthelloZero
 
 ## How to create SSH private key:

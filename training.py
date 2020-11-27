@@ -79,7 +79,8 @@ class OthelloMCTS(MCTS):
         network_probabilities = self.get_state_actions_propabilities(state)
         mask = self._mask_valid_moves(state)
         probabilities = network_probabilities * mask
-        return probabilities
+        probabilities_scaled /= np.sum(probabilities)
+        return probabilities_scaled
     
     def _mask_valid_moves(self, state):
         board_mask = np.zeros((self._board_size, self._board_size))

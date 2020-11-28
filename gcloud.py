@@ -23,6 +23,7 @@ For more information, see the README.md under /compute.
 
 import os
 import time
+import tarfile
 import logging
 import pathlib
 import argparse
@@ -157,33 +158,49 @@ def wait_for_operation(compute, project, zone, operation):
 
 
 def self_upload_to_instance(instance, key_filename):
-    import tarfile
+    print('uploading projects files to instance...')
+
     ip = instance['networkInterfaces'][0]['accessConfigs'][0]['natIP']
     
     files = subprocess.check_output('git ls-files', shell=True, text=True).splitlines()
     
-    client = SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(ip, username=SSH_USER, key_filename=key_filename)
+    client = ssh_connection(ip, key_filename)
     sftp = client.open_sftp()
     remote_filepath = os.path.join(REMOTE_HOME, 'files.tar.xz')
     tar_fileobj = sftp.open(remote_filepath, mode='w')
     tar_file = tarfile.open(fileobj=tar_fileobj, mode='w:xz')
     for filepath in files:
         local_path = os.path.join(os.getcwd(), filepath)
-        tar_file.add(local_path)
+        tar_file.add(local_path, arcname=filepath)
     tar_file.close()
     tar_fileobj.close()
-    client.exec_command(f'tar -xf {remote_filepath}')
+    client.exec_command(f'tar -xf files.tar.xz')
+    client.exec_command(f'rm files.tar.xz')
     client.close()
 
+def get_instance_ip(instance):
+    return instance['networkInterfaces'][0]['accessConfigs'][0]['natIP']
 
-def ssh_connection(compute, project, zone, instance_name, key_filename):
-    instance = compute.instances().get(project=project, zone=zone, instance=instance_name).execute()
-    ip = instance['networkInterfaces'][0]['accessConfigs'][0]['natIP']
+
+def wait_for_instance_startup_script(instance, key_filename):
+    ip = get_instance_ip(instance)
+    client = ssh_connection(ip, key_filename)
+    stdin, stdout, stderr = client.exec_command(
+        'ps aux | grep -v grep | grep "/bin/bash /startup" | awk \'{print $2}\'')
+    lines = stdout.readlines()
+    if not lines:
+        return
+    pid = lines[0].strip()
+    stdin, stdout, stderr = client.exec_command(f'sudo cat /proc/{pid}/fd/1 > /dev/null')
+    stdout.channel.recv_exit_status()
+
+
+def ssh_connection(ip, key_filename, timeout=120, auth_timeout=60):
+    # instance = compute.instances().get(project=project, zone=zone, instance=instance_name).execute()
+    # ip = instance['networkInterfaces'][0]['accessConfigs'][0]['natIP']
     client = SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(ip, username=SSH_USER, key_filename=key_filename)
+    client.connect(ip, username=SSH_USER, key_filename=key_filename, timeout=timeout, auth_timeout=auth_timeout)
     return client
 
 
@@ -224,11 +241,22 @@ if __name__ == '__main__':
             operations.append(operation)
         for operation in operations:
             wait_for_operation(compute, args.project, args.zone, operation['name'])
-        
+
         assert args.key_filename, 'Cannot upload environment files without key file'
 
-        for instance in instances:
+        print('waiting one minute to instances be accessible...')
+        time.sleep(60)
+
+        old_instances = [instance['name'] for instance in instances]
+        new_instances = search_instances(compute, args.project, args.zone, *INSTANCE_LABEL)
+        new_instances = [instance for instance in new_instances if instance['name'] not in old_instances]
+        
+        for instance in new_instances:
             self_upload_to_instance(instance, args.key_filename)
+        
+        for instance in new_instances:
+            print('waiting for startup script finish to run')
+            wait_for_instance_startup_script(instance, args.key_filename)
 
     elif args.command == 'delete':
         instances.reverse()
@@ -244,13 +272,13 @@ if __name__ == '__main__':
     elif args.command == 'upload':
         assert args.key_filename, 'Cannot upload environment files without key file'
 
-        #for instance in instances:
-        #    self_upload_to_instance(instance, args.key_filename)
+        for instance in instances:
+           self_upload_to_instance(instance, args.key_filename)
 
-        ssh = ssh_connection(compute, args.project, args.zone, instances[0]['name'], args.key_filename)
-        stdin, stdout, stderr = ssh.exec_command('docker run igorxp5/othello-zero')
-        print(stdout.readlines())
-        print(stderr.readlines())
+        # ssh = ssh_connection(compute, args.project, args.zone, instances[0]['name'], args.key_filename)
+        # stdin, stdout, stderr = ssh.exec_command('docker run igorxp5/othello-zero')
+        # print(stdout.readlines())
+        # print(stderr.readlines())
 
     # project = 'applada-265114'
     # zone = 'southamerica-east1-b'

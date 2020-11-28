@@ -84,18 +84,11 @@ class NNetWrapper:
 
     # save weights
     def save_checkpoint(self, filepath):
-        if self.network_type == NeuralNets.ONN:
-          filepath += f'-onn-{self.board_size_x}.h5'
-        elif self.network_type == NeuralNets.BNN:
-          filepath += f'-bnn-{self.board_size_x}.h5'
-        self.nnet.model.save_weights(filepath)
+        self.nnet.model.save_weights(filepath, save_format='h5')
 
     # load saved weights
     def load_checkpoint(self, filepath):
-        if self.network_type == NeuralNets.ONN:
-            filepath += f'-onn-{self.board_size_x}.h5'
-        elif self.network_type == NeuralNets.BNN:
-            filepath += f'-bnn-{self.board_size_x}.h5'
+        assert filepath.endswith('.h5'), 'Expecting a file with .h5 as extension'
         self.nnet.model.load_weights(filepath)
 
     def copy(self):

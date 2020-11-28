@@ -72,10 +72,9 @@ def duel_between_neural_networks(board_size, neural_network_1, neural_network_2,
     return agents[agent_winner]
 
 
-def evaluate_neural_network(total_iterations, neural_network, num_simulations, degree_exploration, 
+def evaluate_neural_network(board_size, total_iterations, neural_network, num_simulations, degree_exploration, 
                             agent_class, agent_arguments):
     net_wins = 0
-    board_size = neural_network.board_size_x
 
     logging.info(f'Neural Network Evaluation: Started')
 

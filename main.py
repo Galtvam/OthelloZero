@@ -3,9 +3,16 @@ import random
 import logging
 import argparse
 
+import googleapiclient.discovery
+import gcloud
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
 
 LOG_FORMAT = '[%(threadName)s] %(asctime)s %(levelname)s: %(message)s'
 DEFAULT_CHECKPOINT_FILEPATH = './othelo_model_weights'
+
 
 
 def training(board_size, num_iterations, num_episodes, num_simulations, degree_exploration, temperature, neural_network, 
@@ -60,21 +67,19 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
 
             logging.info(f'Iteration {i}/{num_iterations} - Generating BLACK x WHITE matches')
 
-            with worker_manager.run(WorkType.DUEL_BETWEEN_NEURAL_NETWORKS, self_play_total_games // 2, 
-                                    board_size, old_neural_network, neural_network, 
-                                    degree_exploration, num_simulations) as finish_event:
-                logging.info(f'Iteration {i}/{num_iterations} - Waiting for BLACK x WHITE matches results')
-                finish_event.wait()
+            logging.info(f'Iteration {i}/{num_iterations} - Waiting for BLACK x WHITE matches results')
+            worker_manager.run(WorkType.DUEL_BETWEEN_NEURAL_NETWORKS, self_play_total_games // 2, 
+                               board_size, old_neural_network, neural_network, 
+                               degree_exploration, num_simulations)
             
             self_play_results.extend(worker_manager.get_results())
 
             logging.info(f'Iteration {i}/{num_iterations} - Generating WHITE x BLACK matches')
 
-            with worker_manager.run(WorkType.DUEL_BETWEEN_NEURAL_NETWORKS, self_play_total_games // 2 + self_play_total_games % 2, 
-                                    board_size, old_neural_network, neural_network, 
-                                    degree_exploration, num_simulations) as finish_event:
-                logging.info(f'Iteration {i}/{num_iterations} - Waiting for WHITE x BLACK matches results')
-                finish_event.wait()
+            logging.info(f'Iteration {i}/{num_iterations} - Waiting for WHITE x BLACK matches results')
+            worker_manager.run(WorkType.DUEL_BETWEEN_NEURAL_NETWORKS, self_play_total_games // 2 + self_play_total_games % 2, 
+                               board_size, old_neural_network, neural_network, 
+                               degree_exploration, num_simulations)
             
             self_play_results.extend(worker_manager.get_results())
 
@@ -95,11 +100,10 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
 
         if i % evaluation_interval == 0:
             logging.info(f'Evaluating Neural Network')
-            with worker_manager.run(WorkType.EVALUATE_NEURAL_NETWORK, worker_manager.total_workers(), 
-                                    evaluation_iterations // worker_manager.total_workers(), neural_network, num_simulations,
-                                    degree_exploration, evaluation_agent_class, evaluation_agent_arguments) as finish_event:
-                logging.info(f'Iteration {i}/{num_iterations} - Waiting for evaluation results')
-                finish_event.wait()
+            logging.info(f'Iteration {i}/{num_iterations} - Waiting for evaluation results')
+            worker_manager.run(WorkType.EVALUATE_NEURAL_NETWORK, worker_manager.total_workers(), 
+                               board_size, evaluation_iterations // worker_manager.total_workers(), neural_network, num_simulations,
+                               degree_exploration, evaluation_agent_class, evaluation_agent_arguments)
             
             neural_network_wins = sum(worker_manager.get_results())
 
@@ -136,16 +140,24 @@ if __name__ == '__main__':
 
     parser.add_argument('-ea', '--evaluation-agent', default='random', choices=['random'], help='Agent for neural network evaluation')
     parser.add_argument('-ei', '--evaluation-interval', default=5, type=int, help='Number of iterations between evaluations')
-    parser.add_argument('-eg', '--evaluation-games', default=10, type=int, help='Number of matches against the evaluation agent')
+    parser.add_argument('-eg', '--evaluation-games', default=12, type=int, help='Number of matches against the evaluation agent')
 
     parser.add_argument('-ep', '--epochs', default=10, type=int, help='Number of epochs for neural network training')
     parser.add_argument('-lr', '--learning-rate', default=0.001, type=float, help='Neural network training learning rate')
     parser.add_argument('-dp', '--dropout', default=0.3, type=float, help='Neural network training dropout')
     parser.add_argument('-bs', '--batch-size', default=32, type=int, help='Neural network training batch size')
 
-    parser.add_argument('-wk', '--workers', default=1, type=int, help='Number of workers to do training tasks')
+    parser.add_argument('-tw', '--thread-workers', default=1, type=int, help='Number of Thread workers to do training tasks')
     parser.add_argument('-gw', '--google-workers', default=False, action='store_true', help='Use Google Cloud workers')
-    parser.add_argument('-gt', '--google-workers-tag', help='Tag of Google Cloud machines which will be as worker')
+    parser.add_argument('-gt', '--google-workers-label', default=gcloud.INSTANCE_LABEL[0],
+                        help='Tag of Google Cloud machines which will be as worker')
+    parser.add_argument('-gc', '--google-credentials', default=None, 
+                        help='Google Cloud API Credentials JSON file path')
+    parser.add_argument('-gp', '--google-project', default=None, help='Google Cloud Platform project name')
+    parser.add_argument('-gz', '--google-zone', default=gcloud.DEFAULT_ZONE, 
+                        help='Google Cloud Platform instances zone')
+    parser.add_argument('-gk', '--google-key-filename', default=None, 
+                        help='Google Cloud SSH Private key')
 
     parser.add_argument('-o', '--output-file', default=DEFAULT_CHECKPOINT_FILEPATH, help='File path to save neural network weights')
     parser.add_argument('-w', '--weights-file', default=None, help='File path to load neural network weights')
@@ -181,8 +193,22 @@ if __name__ == '__main__':
     worker_manager.add_worker(ThreadWorker())
     
     if args.google_workers:
-        for _ in range(args.workers):
-            worker_manager.add_worker(GoogleCloudWorker())
+        assert args.google_credentials, 'Google Cloud Credentials required'
+        assert args.google_project, 'Google Cloud Project name required'
+        assert args.google_zone, 'Google Cloud instances zone required'
+        assert args.google_key_filename, 'Google Cloud SSH Private key required'
+        
+        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = args.google_credentials
+
+        compute = googleapiclient.discovery.build('compute', 'v1')
+
+        instances = gcloud.search_instances(compute, args.google_project, args.google_zone, 
+                                            args.google_workers_label, 'true')
+
+        for instance in instances:
+            worker = GoogleCloudWorker(compute, args.google_project, args.google_zone, 
+                                       instance['name'], args.google_key_filename)
+            worker_manager.add_worker(worker)
     else:
         for _ in range(args.workers - 1):
             worker_manager.add_worker(ThreadWorker())

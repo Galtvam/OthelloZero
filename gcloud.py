@@ -138,6 +138,16 @@ def search_instances(compute, project, zone, label_key, label_value):
 # [END delete_instance]
 
 
+# [START get_instance]
+def get_instance(compute, project, zone, instance_name):
+    result = compute.instances().get(
+        project=project,
+        zone=zone,
+        instance=instance_name).execute()
+    return result
+# [END get_instance]
+
+
 # [START wait_for_operation]
 def wait_for_operation(compute, project, zone, operation):
     print('Waiting for operation to finish...')
@@ -174,16 +184,21 @@ def self_upload_to_instance(instance, key_filename):
         tar_file.add(local_path, arcname=filepath)
     tar_file.close()
     tar_fileobj.close()
+    sftp.close()
     client.exec_command(f'tar -xf files.tar.xz')
     client.exec_command(f'rm files.tar.xz')
     client.close()
 
-def get_instance_ip(instance):
+def get_instance_external_ip(instance):
     return instance['networkInterfaces'][0]['accessConfigs'][0]['natIP']
 
 
+def get_instance_internal_ip(instance):
+    return instance['networkInterfaces'][0]['networkIP']
+
+
 def wait_for_instance_startup_script(instance, key_filename):
-    ip = get_instance_ip(instance)
+    ip = get_instance_external_ip(instance)
     client = ssh_connection(ip, key_filename)
     stdin, stdout, stderr = client.exec_command(
         'ps aux | grep -v grep | grep "/bin/bash /startup" | awk \'{print $2}\'')
@@ -196,8 +211,6 @@ def wait_for_instance_startup_script(instance, key_filename):
 
 
 def ssh_connection(ip, key_filename, timeout=120, auth_timeout=60):
-    # instance = compute.instances().get(project=project, zone=zone, instance=instance_name).execute()
-    # ip = instance['networkInterfaces'][0]['accessConfigs'][0]['natIP']
     client = SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     client.connect(ip, username=SSH_USER, key_filename=key_filename, timeout=timeout, auth_timeout=auth_timeout)

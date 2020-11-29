@@ -69,7 +69,7 @@ def duel_between_neural_networks(board_size, neural_network_1, neural_network_2,
 
     agent_winner = duel_between_agents(game, nn_1_agent, nn_2_agent)
 
-    return agents[agent_winner]
+    return 0 if agents[agent_winner] is neural_network_1 else 1
 
 
 def evaluate_neural_network(board_size, total_iterations, neural_network, num_simulations, degree_exploration, 

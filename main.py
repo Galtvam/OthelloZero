@@ -6,12 +6,12 @@ import argparse
 import googleapiclient.discovery
 import gcloud
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
 
 LOG_FORMAT = '[%(threadName)s] %(asctime)s %(levelname)s: %(message)s'
-DEFAULT_CHECKPOINT_FILEPATH = './othelo_model_weights'
+DEFAULT_CHECKPOINT_FILEPATH = './othelo_model_weights.h5'
 
 
 
@@ -41,12 +41,11 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
 
         logging.info(f'Iteration {i}/{num_iterations} - Generating episodes')
 
-        with worker_manager.run(WorkType.EXECUTE_EPISODE, num_episodes, board_size, 
-                                neural_network, degree_exploration, num_simulations, 
-                                temperature, e_greedy) as finish_event:
-            logging.info(f'Iteration {i}/{num_iterations} - Waiting for episodes results')
-            finish_event.wait()
-        
+        logging.info(f'Iteration {i}/{num_iterations} - Waiting for episodes results')
+        worker_manager.run(WorkType.EXECUTE_EPISODE, num_episodes, board_size, 
+                           neural_network, degree_exploration, num_simulations, 
+                           temperature, e_greedy)
+
         for training_example in worker_manager.get_results():
             training_examples.extend(training_example)
 
@@ -69,10 +68,14 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
 
             logging.info(f'Iteration {i}/{num_iterations} - Waiting for BLACK x WHITE matches results')
             worker_manager.run(WorkType.DUEL_BETWEEN_NEURAL_NETWORKS, self_play_total_games // 2, 
-                               board_size, old_neural_network, neural_network, 
+                               board_size, neural_network, old_neural_network, 
                                degree_exploration, num_simulations)
             
-            self_play_results.extend(worker_manager.get_results())
+            for winner in worker_manager.get_results():
+                if winner == 0:
+                    self_play_results.append(neural_network)
+                else:
+                    self_play_results.append(old_neural_network)
 
             logging.info(f'Iteration {i}/{num_iterations} - Generating WHITE x BLACK matches')
 
@@ -81,7 +84,11 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
                                board_size, old_neural_network, neural_network, 
                                degree_exploration, num_simulations)
             
-            self_play_results.extend(worker_manager.get_results())
+            for winner in worker_manager.get_results():
+                if winner == 0:
+                    self_play_results.append(old_neural_network)
+                else:
+                    self_play_results.append(neural_network)
 
             new_net_victories = len([1 for winner in self_play_results if winner is neural_network])
 

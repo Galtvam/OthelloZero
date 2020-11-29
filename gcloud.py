@@ -287,35 +287,3 @@ if __name__ == '__main__':
 
         for instance in instances:
            self_upload_to_instance(instance, args.key_filename)
-
-        # ssh = ssh_connection(compute, args.project, args.zone, instances[0]['name'], args.key_filename)
-        # stdin, stdout, stderr = ssh.exec_command('docker run igorxp5/othello-zero')
-        # print(stdout.readlines())
-        # print(stderr.readlines())
-
-    # project = 'applada-265114'
-    # zone = 'southamerica-east1-b'
-    # result = compute.instances().list(
-    #         project=project,
-    #         zone=zone,
-    #         filter=f'labels.{INSTANCE_LABEL}=cos-stable-85-13310-1041-9').execute()
-    # print(result)
-    
-    # import paramiko
-    # from paramiko.client import SSHClient
-
-    # client = SSHClient()
-    # client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    # client.connect('34.95.245.67', username='circleci', key_filename='/home/igorxp5/Desktop/circle_ci')
-    # sftp = client.open_sftp()
-    
-    # # stdin, stdout, stderr = client.exec_command('python3 --version')
-    # print(stdout.readlines())
-    
-    # import json
-
-    # with open('r.json', 'w') as file:
-    #     json.dump(instances, file, indent=4)
-
-    # operation = create_instance(compute, 'AppLada', 'southamerica-east1-c', 
-    #                             'rl-worker-1', bucket)

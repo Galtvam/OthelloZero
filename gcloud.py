@@ -38,7 +38,7 @@ from paramiko.client import SSHClient
 
 SSH_USER = 'othello-zero'
 REMOTE_HOME = f'/home/{SSH_USER}'
-DEFAULT_ZONE = 'us-west1-b'
+DEFAULT_ZONE = 'southamerica-east1-b'
 INSTANCE_LABEL = 'othello-zero', 'true'
 INSTANCE_NAME = 'othello-zero-worker-{}'
 STARTUP_SCRIPT = './gcloud-startup-script.sh'

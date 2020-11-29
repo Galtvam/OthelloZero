@@ -31,6 +31,7 @@ class OthelloMCTS(MCTS):
         board = np.copy(state)
         if player is OthelloPlayer.WHITE:
             board = OthelloGame.invert_board(board)
+        #print("entrou ######################")
         return super().simulate(board)
     
     def is_terminal_state(self, state):
@@ -48,13 +49,18 @@ class OthelloMCTS(MCTS):
     def get_state_actions(self, state):
         return [tuple(a) for a in OthelloGame.get_player_valid_actions(state, OthelloPlayer.BLACK)]
     
+
+
+    ##########
     def get_next_state(self, state, action):
         board = np.copy(state)
         OthelloGame.flip_board_squares(board, OthelloPlayer.BLACK, *action)
         if OthelloGame.has_player_actions_on_board(board, OthelloPlayer.WHITE):
             # Invert board to keep using BLACK perspective
             board = OthelloGame.invert_board(board)
+
         return board
+    ##########
 
     def get_policy_action_probabilities(self, state, temperature):
         probabilities = np.zeros((self._board_size, self._board_size))
@@ -110,8 +116,13 @@ def execute_episode(board_size, neural_network, degree_exploration, num_simulati
 
     while not game.has_finished():
         state = game.board(BoardView.TWO_CHANNELS)
+
         for _ in range(num_simulations):
             mcts.simulate(state, game.current_player)
+
+        #if game.current_player == OthelloPlayer.BLACK:
+        #    for _ in range(num_simulations):
+        #        mcts.simulate(state, game.current_player)
 
         if game.current_player == OthelloPlayer.WHITE:
             state = OthelloGame.invert_board(state)
@@ -136,6 +147,7 @@ def execute_episode(board_size, neural_network, degree_exploration, num_simulati
             example = state, action_choosed, game.current_player
         examples.append(example)
         
+        #logging.info(game.round)
         game.play(*action)
 
     logging.info(game.board(BoardView.ONE_CHANNEL))
@@ -182,7 +194,10 @@ def machine_move(game, neural_networks_mcts, num_simulations):
     Makes the movement of the machine according to the policy already known
     '''
 
+
+
     state = game.board(BoardView.TWO_CHANNELS)
+
     for _ in range(num_simulations):
         neural_networks_mcts.simulate(state, game.current_player)
 
@@ -203,8 +218,11 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
 
     total_episodes_done = 0
     historic = []
-    training_examples = []
+
     for i in range(1, num_iterations + 1):
+        
+        training_examples = []
+
         old_neural_network = neural_network.copy()
         
         logging.info(f'Iteration {i}/{num_iterations}: Starting iteration')
@@ -215,7 +233,8 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
             temperature = 0
 
         logging.info(f'Iteration {i}/{num_iterations} - Generating episodes')
-
+        
+        '''
         with concurrent.futures.ThreadPoolExecutor(max_workers=episode_thread_pool) as executor:
             future_results = {}
             
@@ -232,6 +251,13 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
                 logging.info(f'Iteration {i}/{num_iterations} - Episode {e}: Finished')
                 episode_examples = future.result()
                 training_examples.extend(episode_examples)
+        '''
+        
+        for e in range(1, num_episodes + 1):
+            total_episodes_done += 1
+            episode_examples = execute_episode(board_size, neural_network, degree_exploration, num_simulations, temperature, e_greedy)
+            training_examples.extend(episode_examples)
+            logging.info(f'Iteration {i}/{num_iterations} - Episode {e}: Finished')
 
         logging.info(f'Iteration {i}/{num_iterations}: All episodes finished')
         
@@ -284,11 +310,23 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
                 neural_network = old_neural_network
         
         # gambiarra
-        neural_network.save_checkpoint(checkpoint_filepath)
-
+        #neural_network.save_checkpoint(checkpoint_filepath)
+        
         if (i % random_agent_interval) == 0:
             color = [OthelloPlayer.BLACK, OthelloPlayer.WHITE]
             net_wins = 0
+            net_black_win = 0
+            net_white_win = 0
+            black_games = 0
+            white_games = 0
+
+            old_net_wins = 0
+            old_net_black_win = 0
+            old_net_white_win = 0
+            old_black_games = 0
+            old_white_games = 0
+
+            logging.info(f'New Neural Network evaluation!')
 
             for k in range(random_agent_fights):
                 random.shuffle(color)
@@ -307,19 +345,81 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
                 winner, points = game.get_winning_player()       
                 logging.info(f'The player {winner} won with {points} points')
                 
+                
+
                 if winner == color[0]:
                     net_wins += 1
-                    logging.info(f'Total Episodes Runned: {total_episodes_done} - Network won: {net_wins}/{k+1}')
+                    if color[0] == OthelloPlayer.BLACK:
+                        black_games += 1
+                        net_black_win += 1
+                    else:
+                        white_games += 1
+                        net_white_win += 1
+                    logging.info(f'Total Episodes Runned: {total_episodes_done} - Network won: {net_wins}/{k+1} =>  {round((net_wins/(k+1)), 2)} win rate, black: {net_black_win}/{black_games} , white: {net_white_win}/{white_games} ')
                 else:
-                    logging.info(f'Total Episodes Runned: {total_episodes_done} - Network lost: {net_wins}/{k+1}')
+                    if color[0] == OthelloPlayer.BLACK:
+                        black_games += 1
+                    else:
+                        white_games += 1
+                    logging.info(f'Total Episodes Runned: {total_episodes_done} - Network won: {net_wins}/{k+1} =>  {round((net_wins/(k+1)), 2)} win rate, black: {net_black_win}/{black_games} , white: {net_white_win}/{white_games} ')
+
+
+            logging.info(f'Old Neural Network evaluation!')
+
+            for k in range(random_agent_fights):
+                random.shuffle(color)
+                game = OthelloGame(board_size, current_player = OthelloPlayer.BLACK)
+                old_neural_networks_mcts = OthelloMCTS(board_size, old_neural_network, degree_exploration=1)
+
+                while not game.has_finished():
+                    #neural network move
+                    if game.current_player is color[0]:
+                        machine_move(game, old_neural_networks_mcts, num_simulations)
+
+                    #random agent move
+                    else:
+                        random_agent(game)
+                
+                winner, points = game.get_winning_player()       
+                logging.info(f'The player {winner} won with {points} points')
+
+
+                if winner == color[0]:
+                    old_net_wins += 1
+                    if color[0] == OthelloPlayer.BLACK:
+                        old_black_games += 1
+                        old_net_black_win += 1
+                    else:
+                        old_white_games += 1
+                        old_net_white_win += 1
+                    logging.info(f'Total Episodes Runned: {total_episodes_done} - Old Network won: {old_net_wins}/{k+1} =>  {round((old_net_wins/(k+1)), 2)} win rate, black: {old_net_black_win}/{old_black_games} , white: {old_net_white_win}/{old_white_games} ')
+                else:
+                    if color[0] == OthelloPlayer.BLACK:
+                        old_black_games += 1
+                    else:
+                        old_white_games += 1
+                    logging.info(f'Total Episodes Runned: {total_episodes_done} - Old Network won: {old_net_wins}/{k+1} =>  {round((old_net_wins/(k+1)), 2)} win rate, black: {old_net_black_win}/{old_black_games} , white: {old_net_white_win}/{old_white_games} ')
             
-            historic.append( (total_episodes_done, (net_wins/random_agent_fights)) )
-            logging.info(historic)
+
+
+            if net_wins > (old_net_wins * 1.1):
+                logging.info("Saving new network!")
+                historic.append( (total_episodes_done, (net_wins/random_agent_fights)) )
+                logging.info(historic)
+                neural_network.save_checkpoint(checkpoint_filepath)
+            else:
+                logging.info("Saving old network!")
+                historic.append( (total_episodes_done, (old_net_wins/random_agent_fights)) )
+                logging.info(historic)
+                old_neural_network.save_checkpoint(checkpoint_filepath)
+                neural_network = old_neural_network
 
             with open(f'historic-last-training-session-{board_size}.txt', 'w') as output:
                 output.write(str(historic))
             with open(f'examples-{board_size}.txt', 'w') as output:
                 output.write(str(training_examples))
+
+        
 
 
 

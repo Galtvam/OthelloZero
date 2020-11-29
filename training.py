@@ -1,3 +1,4 @@
+import os
 import random
 import logging
 import argparse
@@ -453,12 +454,19 @@ if __name__ == '__main__':
 
     parser.add_argument('-o', '--output-file', default=DEFAULT_CHECKPOINT_FILEPATH, help='File path to save neural network weights')
     parser.add_argument('-w', '--weights-file', default=None, help='File path to load neural network weights')
-    parser.add_argument('-l', '--log-level', default='DEBUG', choices=('INFO', 'DEBUG', 'WARNING', 'ERROR'), help='Logging level')
+    parser.add_argument('-l', '--log-level', default='INFO', choices=('INFO', 'DEBUG', 'WARNING', 'ERROR'), help='Logging level')
     parser.add_argument('-t', '--temperature', default=1, type=int, help='Policy temperature parameter')
     parser.add_argument('-tt', '--temperature-threshold', default=25, type=int, help='Number of iterations using the temperature '
                                                                                      'parameter before changing to 0')
     
+    parser.add_argument('-ug', '--use-gpu', default=False, action='store_true', help='Enable GPU for Tensorflow')
+
     args = parser.parse_args()
+
+    if not args.use_gpu:
+        os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
+    from Net.NNet import NNetWrapper
 
     assert args.victory_threshold <= args.total_games, '"victory-threshold" must be less than "total-games"'
 

@@ -1,5 +1,6 @@
 import random
 import logging
+import numpy as np
 
 from Net.NNet import NeuralNets
 from Othello import OthelloGame, OthelloPlayer, BoardView
@@ -21,6 +22,23 @@ class RandomOthelloAgent(OthelloAgent):
         possible_moves = tuple(self.game.get_valid_actions())
         move = random.choice(possible_moves)
         self.game.play(*move)
+
+
+class GreedyOthelloAgent(OthelloAgent):
+    def play(self):
+        move_points = {}
+        possible_moves = tuple(self.game.get_valid_actions())
+        points_before = game.get_players_points()[game.current_player]
+        board = self.game.board(BoardView)
+        
+        for move in possible_moves:
+            state = np.copy(self.game.board(BoardView))
+            OthelloGame.flip_board_squares(state, game.current_playe, *move)
+            points = OthelloGame.get_board_players_points(state)[OthelloPlayer.BLACK] - points_before
+            move_points[move] = points
+        
+        greedy_move = max(move_points, key=move_points.get)
+        game.play(*greedy_move)
 
 
 class NeuralNetworkOthelloAgent(OthelloAgent):

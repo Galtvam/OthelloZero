@@ -62,4 +62,5 @@ class OthelloNN:
     self.pi = Reshape((self.board_x, self.board_y))(self.pi)
 
     self.model = Model(inputs=self.input_boards, outputs=[self.pi, self.v])
-    self.model.compile(loss=['categorical_crossentropy','mean_squared_error'], optimizer=Adam(self.learning_rate))
+    self.model.compile(loss=['categorical_crossentropy','mean_squared_error'], 
+                       optimizer=Adam(self.learning_rate, clipvalue=0.5))

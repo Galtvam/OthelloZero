@@ -78,6 +78,9 @@ class Worker:
             return self.evaluate_neural_network
         raise TypeError('expecting WorkType object')
 
+    def clear_cache(self):
+        pass
+
 
 class ThreadWorker(Worker):
     def execute_episode(self, *args, **kwargs):
@@ -103,58 +106,82 @@ class GoogleCloudWorker(Worker):
         
         self._internal_ssh_pub_key = None
 
-        self._neural_network_weights_file = []
+        self._neural_networks = {}
         self._ssh = None
         self._sftp = None
+    
+    def __del__(self):
+        self.clear_cache()
+    
+    @property
+    def ip(self):
+        return get_instance_external_ip(self._instance)
     
     def setup(self, work_type, iterations, *args, **kwargs):
         pass
 
     def execute_episode(self, board_size, neural_network, degree_exploration, 
                         num_simulations, policy_temperature, e_greedy):
-        args = [board_size, self._neural_network_weights_file[0], degree_exploration, 
+        args = [board_size, self._neural_networks[neural_network], degree_exploration, 
                 num_simulations, policy_temperature, e_greedy]
         training_examples = self._remote_pickle_training_call('execute_episode', args)
         return training_examples
     
     def evaluate_neural_network(self, board_size, total_iterations, neural_network, num_simulations, degree_exploration, 
                                 agent_class, agent_arguments):
-        args = [board_size, total_iterations, self._neural_network_weights_file[0], 
+        args = [board_size, total_iterations, self._neural_networks[neural_network], 
                 num_simulations, degree_exploration, agent_class, agent_arguments]
         net_wins = self._remote_pickle_training_call('evaluate_neural_network', args)
         return net_wins
     
     def duel_between_neural_networks(self, board_size, neural_network_1, neural_network_2, 
                                      degree_exploration, num_simulations):
-        args = [board_size, self._neural_network_weights_file[0], 
-                self._neural_network_weights_file[1], degree_exploration, num_simulations]
+        args = [board_size, self._neural_networks[neural_network_1], self._neural_networks[neural_network_2], 
+                degree_exploration, num_simulations]
         net_wins = self._remote_pickle_training_call('duel_between_neural_networks', args)
         return net_wins
 
     def teardown(self, work_type):
-        logging.info(f'Task {work_type} Teardown: Deleting cache files...')
-        if self._neural_network_weights_file:
-            self._sftp = self._ssh.open_sftp()
-
-            for filepath in self._neural_network_weights_file:
-                self._sftp.remove(filepath)
-            self._ssh.close()
-
         self._ssh = None
         self._sftp = None
-        self._neural_network_weights_file = []
+    
+    @contextlib.contextmanager
+    def ssh_connection(self):
+        ssh = ssh_connection(self.ip, self._key_filename)
+        try:
+            yield ssh
+        finally:
+            ssh.close()
+    
+    @contextlib.contextmanager
+    def sftp_connection(self, ssh):
+        sftp = ssh.open_sftp()
+        try:
+            yield sftp
+        finally:
+            sftp.close()
+
+    def clear_cache(self):
+        if self._neural_networks:
+            with self.ssh_connection() as ssh:
+                sftp = ssh.open_sftp()
+                for nn, filepath in self._neural_networks.items():
+                    self._sftp.remove(filepath)
+        self._neural_networks = {}
+        self._sftp = None
+        self._ssh = None
     
     def _remote_pickle_training_call(self, command_name, args):
         args = pack_arguments_to_pickle(*args)
         command = 'docker run -v $PWD:/OthelloZero -v /tmp/:/tmp:ro igorxp5/othello-zero '
         command += f'OthelloZero/pickle_training.py {command_name} {" ".join(args)}'
-        
-        stdin, stdout, stderr = self._ssh.exec_command(command)
-        stdout.channel.recv_exit_status()
-        if stdout.channel.recv_exit_status() != 0:
-            error = stderr.read().decode()
-            logging.info(error)
-            raise RuntimeError(error)
+        with self.ssh_connection() as ssh:
+            stdin, stdout, stderr = ssh.exec_command(command)
+            stdout.channel.recv_exit_status()
+            if stdout.channel.recv_exit_status() != 0:
+                error = stderr.read().decode()
+                logging.info(error)
+                raise RuntimeError(error)
         
         return unpack_base64_pickle(stdout.readlines()[0].strip())
 
@@ -192,109 +219,102 @@ class WorkerManager:
     def total_workers(self):
         return len(self._workers)
     
+    def clear_cache(self):
+        for worker in self._workers:
+            worker.clear_cache()
+
     def _wait_workers(self):
         for worker in self._workers:
             worker.wait()
         self._finished_event.set()
     
-    def has_google_worker(self):
+    def _has_google_worker(self):
         return any(isinstance(worker, GoogleCloudWorker) for worker in self._workers)
+    
+    def _google_workers(self):
+        return filter(lambda w: isinstance(w, GoogleCloudWorker), self._workers)
     
     def _setup(self, work_type, iterations, *args, **kwargs):
         files_to_send = []
-        if work_type is WorkType.EXECUTE_EPISODE and self.has_google_worker():
-            _, filepath = tempfile.mkstemp(suffix='.h5')
-            neural_network = args[1]
-            neural_network.save_checkpoint(filepath)
-            files_to_send.append(filepath)
+        task_neural_networks = []
+        if work_type is WorkType.EXECUTE_EPISODE and self._has_google_worker():
+            task_neural_networks.append(args[1])
 
-        elif work_type is WorkType.EVALUATE_NEURAL_NETWORK and self.has_google_worker():
-            _, filepath = tempfile.mkstemp(suffix='.h5')
-            neural_network = args[2]
-            neural_network.save_checkpoint(filepath)
-            files_to_send.append(filepath)
-        
-        elif work_type is WorkType.DUEL_BETWEEN_NEURAL_NETWORKS and self.has_google_worker():
-            _, filepath = tempfile.mkstemp(suffix='.h5')
-            neural_network_1 = args[1]
-            neural_network_1.save_checkpoint(filepath)
-            files_to_send.append(filepath)
+        elif work_type is WorkType.EVALUATE_NEURAL_NETWORK and self._has_google_worker():
+            task_neural_networks.append(args[2])
 
-            _, filepath = tempfile.mkstemp(suffix='.h5')
-            neural_network_2 = args[2]
-            neural_network_2.save_checkpoint(filepath)
-            files_to_send.append(filepath)
+        elif work_type is WorkType.DUEL_BETWEEN_NEURAL_NETWORKS and self._has_google_worker():
+            task_neural_networks.append(args[1])
+            task_neural_networks.append(args[2])
         
-        if self.has_google_worker():
-            for filepath in files_to_send:
-                file_size = humanfriendly.format_size(os.path.getsize(filepath))
-                
-                scp_processes = []
-                uploaded_worker = None
-                for worker in self._workers:
-                    if isinstance(worker, GoogleCloudWorker):
-                        worker._neural_network_weights_file.append(filepath)
-                        ip = get_instance_external_ip(worker._instance)
-                        worker._ssh = ssh_connection(ip, worker._key_filename)
-                        if not uploaded_worker:
-                            worker._sftp = worker._ssh.open_sftp()
+        main_worker = None
+        scp_processes = []
+        for neural_network in task_neural_networks:
+            filepath = None
+            for worker in self._google_workers():
+                if neural_network not in worker._neural_networks and not main_worker:
+                    _, filepath = tempfile.mkstemp(suffix='.h5')
+                    neural_network.save_checkpoint(filepath)
+                    file_size = humanfriendly.format_size(os.path.getsize(filepath))
+
+                    with worker.ssh_connection() as ssh:
+                        with worker.sftp_connection(ssh) as sftp:
                             logging.info(f'Uploading Neural network weights ({file_size})...')
-                            worker._sftp.put(filepath, filepath)
+                            sftp.put(filepath, filepath)
                             logging.info(f'Neural network weights uploaded')
                             os.remove(filepath)
                             if not worker._internal_ssh_pub_key:
                                 try:
-                                    worker._sftp.stat(worker.SSH_PRIV_KEY)
+                                    sftp.stat(worker.SSH_PRIV_KEY)
                                 except IOError:
                                     logging.info(f'Creating Internal SSH Key...')
                                     command = f'ssh-keygen -q -N "" -t rsa -f {worker.SSH_PRIV_KEY} -C {SSH_USER}'
-                                    stdin, stdout, stderr = worker._ssh.exec_command(command)
+                                    stdin, stdout, stderr = ssh.exec_command(command)
                                     if stdout.channel.recv_exit_status() != 0:
                                         raise RuntimeError('cannot create internal ssh key')
                                     logging.info(f'Internal SSH Key created successfully!')
                                 logging.info(f'Saving SSH Public Key...')
-                                with worker._sftp.open(worker.SSH_PUB_KEY) as file:
+                                with sftp.open(worker.SSH_PUB_KEY) as file:
                                     worker._internal_ssh_pub_key = file.read().decode('ascii')
                                 logging.info(f'SSH Public Key saved!')
-                            worker._sftp.close()
-                            uploaded_worker = worker
-                
-                for worker in self._workers:
-                    if isinstance(worker, GoogleCloudWorker) and uploaded_worker and uploaded_worker is not worker:
-                        instance_name = worker._instance['name']
-                        if not worker._internal_ssh_pub_key:
-                            logging.info(f'Adding SSH Key to {instance_name}...')
-                            worker._sftp = worker._ssh.open_sftp()
+                    main_worker = worker
+
+            logging.info(f'Main worker: {main_worker._instance["name"]}')
+            for worker in self._google_workers():
+                instance_name = worker._instance['name']
+                if filepath and not worker._internal_ssh_pub_key:
+                    with worker.ssh_connection() as ssh:
+                        with worker.sftp_connection(ssh) as sftp:
                             try:
-                                worker._sftp.stat(worker.SSH_PUB_KEY)
+                                sftp.stat(worker.SSH_PUB_KEY)
+                                logging.info(f'SSH Key already exists in {instance_name}...')
                             except IOError:
-                                command = f'echo "{uploaded_worker._internal_ssh_pub_key}" > {worker.SSH_PUB_KEY}'
-                                stdin, stdout, stderr = worker._ssh.exec_command(command)
+                                command = f'echo "{main_worker._internal_ssh_pub_key}" > {worker.SSH_PUB_KEY}'
+                                stdin, stdout, stderr = ssh.exec_command(command)
                                 if stdout.channel.recv_exit_status() != 0:
                                     logging.error(stderr.read().decode())
                                     raise RuntimeError(f'cannot write pub key into {instance_name}')
                                 command = f'cat {worker.SSH_PUB_KEY} >> /home/{SSH_USER}/.ssh/authorized_keys'
-                                stdin, stdout, stderr = worker._ssh.exec_command(command)
+                                stdin, stdout, stderr = ssh.exec_command(command)
                                 if stdout.channel.recv_exit_status() != 0:
                                     logging.error(stderr.read().decode())
                                     raise RuntimeError(f'cannot add key to authorized_keys')
-                            finally:
-                                worker._sftp.close()
-                            worker._internal_ssh_pub_key = uploaded_worker._internal_ssh_pub_key
-                            logging.info(f'SSH Key added to {instance_name}!')
-                        
-                        ip = get_instance_internal_ip(worker._instance)
+                                logging.info(f'SSH Key added to {instance_name}!')
+                            worker._internal_ssh_pub_key = main_worker._internal_ssh_pub_key
+                    
+                    with main_worker.ssh_connection() as ssh:
                         logging.info(f'Sending Neural network weights to instance: {instance_name}')
-                        scp_process = uploaded_worker._ssh.exec_command(f'scp -i {uploaded_worker.SSH_PRIV_KEY} {filepath} {ip}:{filepath}')
-                        scp_processes.append(scp_process)
+                        ip = get_instance_internal_ip(worker._instance)
+                        command = f'scp -i {main_worker.SSH_PRIV_KEY} {filepath} {ip}:{filepath}'
+                        sdtin, stdout, stderr = ssh.exec_command(command)
+                        logging.info(f'Waiting for neural networks be transfered...')
+                        if stdout.channel.recv_exit_status() != 0:
+                            logging.error(stderr.read().decode())
+                            raise RuntimeError('something wrong happepend during file transfer')
+                        logging.info(f'Neural network weights uploaded successfully')
 
-                logging.info(f'Waiting for neural networks be transfered...')
-                for sdtin, stdout, stderr in scp_processes:
-                    if stdout.channel.recv_exit_status() != 0:
-                        logging.error(stderr.read().decode())
-                        raise RuntimeError('something wrong happepend during file transfer')
-                logging.info(f'Neural network weights uploaded successfully')
-
+                worker._neural_networks[neural_network] = filepath
+        
     @staticmethod
     def divide_iterations(total_iterations, total_workers):
         worker_total_iterations = [0] * total_iterations

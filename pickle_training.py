@@ -37,7 +37,7 @@ def duel_between_neural_networks(board_size, weights_1_file, weights_2_file, deg
                                                  degree_exploration, num_simulations)
 
 
-def evaluate_neural_network(board_size, total_iterations, weights_1_file, num_simulations, degree_exploration, 
+def evaluate_neural_network(board_size, total_iterations, weights_file, num_simulations, degree_exploration, 
                             agent_class, agent_arguments):
     # FIXME This function doesn't work if agent_class is a NeuralNetworkOthelloAgent,
     # agent_arguments must pass a neural network

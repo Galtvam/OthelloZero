@@ -148,6 +148,36 @@ def get_instance(compute, project, zone, instance_name):
 # [END get_instance]
 
 
+# [START stop_instance]
+def stop_instance(compute, project, zone, instance_name):
+    result = compute.instances().stop(
+        project=project,
+        zone=zone,
+        instance=instance_name).execute()
+    return result
+# [END stop_instance]
+
+
+# [START restart_instance]
+def restart_instance(compute, project, zone, instance_name):
+    result = compute.instances().reset(
+        project=project,
+        zone=zone,
+        instance=instance_name).execute()
+    return result
+# [END restart_instance]
+
+
+# [START start_instance]
+def start_instance(compute, project, zone, instance_name):
+    result = compute.instances().start(
+        project=project,
+        zone=zone,
+        instance=instance_name).execute()
+    return result
+# [END start_instance]
+
+
 # [START wait_for_operation]
 def wait_for_operation(compute, project, zone, operation):
     print('Waiting for operation to finish...')
@@ -237,6 +267,12 @@ if __name__ == '__main__':
 
     upload_env = subprasers.add_parser('upload', help='Uploads environment files (project files)')
 
+    start = subprasers.add_parser('start', help='Start all Google Cloud workers')
+
+    stop = subprasers.add_parser('stop', help='Stop all Google Cloud workers')
+
+    restart = subprasers.add_parser('restart', help='Restart all Google Cloud workers')
+
     args = parser.parse_args()
 
     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = args.credentials
@@ -287,3 +323,15 @@ if __name__ == '__main__':
 
         for instance in instances:
            self_upload_to_instance(instance, args.key_filename)
+
+    elif args.command == 'start':
+        for instance in instances:
+           start_instance(compute, args.project, args.zone, instance['name'])
+    
+    elif args.command == 'stop':
+        for instance in instances:
+           stop_instance(compute, args.project, args.zone, instance['name'])
+    
+    elif args.command == 'restart':
+        for instance in instances:
+           restart_instance(compute, args.project, args.zone, instance['name'])

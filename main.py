@@ -42,9 +42,15 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
         logging.info(f'Iteration {i}/{num_iterations} - Generating episodes')
 
         logging.info(f'Iteration {i}/{num_iterations} - Waiting for episodes results')
+        # Does not matter if its we execute episode on old_neural_network or neural_network
+        # To avoid bugs with GoogleCloudWorker cache use old_neural_network
+        # Changing this, the worker consider will neural_network cache instead of
+        # using the trained neural_network
         worker_manager.run(WorkType.EXECUTE_EPISODE, num_episodes, board_size, 
-                           neural_network, degree_exploration, num_simulations, 
+                           old_neural_network, degree_exploration, num_simulations, 
                            temperature, e_greedy)
+        
+        total_episodes_done += num_episodes
 
         for training_example in worker_manager.get_results():
             training_examples.extend(training_example)
@@ -62,12 +68,12 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
         if self_play_training and i % self_play_interval == 0:
             logging.info(f'Iteration {i}/{num_iterations}: Self-play to evaluate the neural network training')
             
-            self_play_results = [] 
+            self_play_results = []
 
-            logging.info(f'Iteration {i}/{num_iterations} - Generating BLACK x WHITE matches')
+            logging.info(f'Iteration {i}/{num_iterations} - Generating self-play matches')
 
-            logging.info(f'Iteration {i}/{num_iterations} - Waiting for BLACK x WHITE matches results')
-            worker_manager.run(WorkType.DUEL_BETWEEN_NEURAL_NETWORKS, self_play_total_games // 2, 
+            logging.info(f'Iteration {i}/{num_iterations} - Waiting for self-play matches results')
+            worker_manager.run(WorkType.DUEL_BETWEEN_NEURAL_NETWORKS, self_play_total_games, 
                                board_size, neural_network, old_neural_network, 
                                degree_exploration, num_simulations)
             
@@ -77,18 +83,31 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
                 else:
                     self_play_results.append(old_neural_network)
 
-            logging.info(f'Iteration {i}/{num_iterations} - Generating WHITE x BLACK matches')
+            # logging.info(f'Iteration {i}/{num_iterations} - Generating BLACK x WHITE matches')
 
-            logging.info(f'Iteration {i}/{num_iterations} - Waiting for WHITE x BLACK matches results')
-            worker_manager.run(WorkType.DUEL_BETWEEN_NEURAL_NETWORKS, self_play_total_games // 2 + self_play_total_games % 2, 
-                               board_size, old_neural_network, neural_network, 
-                               degree_exploration, num_simulations)
+            # logging.info(f'Iteration {i}/{num_iterations} - Waiting for BLACK x WHITE matches results')
+            # worker_manager.run(WorkType.DUEL_BETWEEN_NEURAL_NETWORKS, self_play_total_games // 2, 
+            #                    board_size, neural_network, old_neural_network, 
+            #                    degree_exploration, num_simulations)
             
-            for winner in worker_manager.get_results():
-                if winner == 0:
-                    self_play_results.append(old_neural_network)
-                else:
-                    self_play_results.append(neural_network)
+            # for winner in worker_manager.get_results():
+            #     if winner == 0:
+            #         self_play_results.append(neural_network)
+            #     else:
+            #         self_play_results.append(old_neural_network)
+
+            # logging.info(f'Iteration {i}/{num_iterations} - Generating WHITE x BLACK matches')
+
+            # logging.info(f'Iteration {i}/{num_iterations} - Waiting for WHITE x BLACK matches results')
+            # worker_manager.run(WorkType.DUEL_BETWEEN_NEURAL_NETWORKS, (self_play_total_games // 2) + self_play_total_games % 2, 
+            #                    board_size, old_neural_network, neural_network, 
+            #                    degree_exploration, num_simulations)
+            
+            # for winner in worker_manager.get_results():
+            #     if winner == 0:
+            #         self_play_results.append(old_neural_network)
+            #     else:
+            #         self_play_results.append(neural_network)
 
             new_net_victories = len([1 for winner in self_play_results if winner is neural_network])
 
@@ -125,6 +144,8 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
 
         with open(f'historic-last-training-session-{board_size}.txt', 'w') as output:
             output.write(str(historic))
+        
+        worker_manager.clear_cache()
     
     return historic
 

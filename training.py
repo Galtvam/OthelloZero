@@ -10,6 +10,19 @@ from agents import NeuralNetworkOthelloAgent, duel_between_agents
 from Othello import OthelloGame, OthelloPlayer, BoardView
 
 
+def training_example_symmetries(board, policy):
+    symetric_examples = []
+    for rotation in range(1, 5):
+        for flip in [True, False]:
+            new_board_example = np.rot90(board, k=rotation) 
+            new_policy_example = np.rot90(policy, k=rotation)
+            if flip:
+                new_board_example = np.fliplr(new_board_example)
+                new_policy_example = np.fliplr(new_policy_example)
+            symetric_examples.append((new_board_example, new_policy_example))
+    return symetric_examples
+
+
 def execute_episode(board_size, neural_network, degree_exploration, 
                     num_simulations, policy_temperature, e_greedy):
     examples = []
@@ -46,7 +59,10 @@ def execute_episode(board_size, neural_network, degree_exploration,
         action_choosed[action[0]][action[1]] = 1
 
         example = game.board(board_view_type), action_choosed, game.current_player
-        examples.append(example)
+
+        for board_example, policy_example in training_example_symmetries(game.board(board_view_type), action_choosed):
+            example = board_example, policy_example, game.current_player
+            examples.append(example)
         
         game.play(*action)
 

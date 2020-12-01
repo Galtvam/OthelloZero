@@ -62,7 +62,7 @@ class NNetWrapper:
         target_pis = np.asarray(target_pis)
         target_vs = np.asarray(target_vs)
         
-        log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        log_dir = "logs/fit/" + f"onn-{self.board_size_x}"
         tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
         
         return self.nnet.model.fit(x=input_boards, y=[target_pis, target_vs], batch_size=self.batch_size, 

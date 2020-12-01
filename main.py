@@ -309,7 +309,7 @@ if __name__ == '__main__':
                                        instance['name'], args.google_key_filename)
             worker_manager.add_worker(worker)
     else:
-        for _ in range(args.workers - 1):
+        for _ in range(args.thread_workers - 1):
             worker_manager.add_worker(ThreadWorker())
 
     training(board_size=args.board_size, num_iterations=args.iterations, num_episodes=args.episodes, num_simulations=args.simulations, 

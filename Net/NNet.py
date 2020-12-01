@@ -4,6 +4,8 @@ Imports
 """
 import numpy as np
 import os
+import datetime
+import tensorflow as tf
 
 from enum import Enum, auto
 
@@ -60,8 +62,11 @@ class NNetWrapper:
         target_pis = np.asarray(target_pis)
         target_vs = np.asarray(target_vs)
         
+        log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
+        
         return self.nnet.model.fit(x=input_boards, y=[target_pis, target_vs], batch_size=self.batch_size, 
-                                   epochs=self.epochs, verbose=verbose)
+                                   epochs=self.epochs, verbose=verbose, callbacks=[tensorboard_callback])
 
     def predict(self, board):
         '''

@@ -101,7 +101,19 @@ class OthelloMCTS(MCTS):
                 state = OthelloGame.convert_to_one_channel_board(state)
             self._predict_cache[hash_] = self._neural_network.predict(state)
         return self._predict_cache[hash_]
-    
+
+def training_example_symmetries(board, policy):
+    symetric_examples = []
+    for rotation in range(1, 5):
+        for flip in [True, False]:
+            new_board_example = np.rot90(board, k=rotation) 
+            new_policy_example = np.rot90(policy, k=rotation)
+            if flip:
+                new_board_example = np.fliplr(new_board_example)
+                new_policy_example = np.fliplr(new_policy_example)
+            symetric_examples.append((new_board_example, new_policy_example))
+    return symetric_examples
+
 
 def execute_episode(board_size, neural_network, degree_exploration, num_simulations, policy_temperature, e_greedy):
     examples = []
@@ -140,12 +152,11 @@ def execute_episode(board_size, neural_network, degree_exploration, num_simulati
 
         action_choosed = np.zeros((board_size, board_size))
         action_choosed[action[0]][action[1]] = 1
-
-        #save examples
-        if board_view_type == BoardView.ONE_CHANNEL:
-            example = game.board(BoardView.ONE_CHANNEL), action_choosed, game.current_player
-        else:
-            example = state, action_choosed, game.current_player
+        
+        for board_example, policy_example in training_example_symmetries(game.board(board_view_type), action_choosed):
+            example = board_example, policy_example, game.current_player
+            examples.append(example)
+        
         examples.append(example)
         
         #logging.info(game.round)

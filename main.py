@@ -1,10 +1,11 @@
 import os
+import numpy
 import random
 import logging
 import argparse
 
-import googleapiclient.discovery
 import gcloud
+import googleapiclient.discovery
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
@@ -14,11 +15,42 @@ LOG_FORMAT = '[%(threadName)s] %(asctime)s %(levelname)s: %(message)s'
 DEFAULT_CHECKPOINT_FILEPATH = './othelo_model_weights.h5'
 
 
+class CircularArray:
+    def __init__(self, max_):
+        self._list = numpy.empty(max_, dtype=object)
+        self._index = 0
+
+    def append(self, item):
+        self._list[self._index % self._list.size] = item
+        self._index = (self._index % self._list.size) + 1
+    
+    def extend(self, items):
+        for item in items:
+            self.append(item)
+    
+    def __len__(self):
+        return self._list.size
+
+    def __getitem__(self, *args):
+        return self._list.__class__.__getitem__(self._list, *args)
+    
+    def __setitem__(self, *args):
+        return self._list.__class__.__setitem__(self._list, *args)
+    
+    def __iter__(self):
+        return iter(self._list)
+
+    def __str__(self):
+        return str(self._list)
+
+    def __repr__(self):
+        return '{}({})'.format(self.__class__.__name__, repr(self._list.size))
+
 
 def training(board_size, num_iterations, num_episodes, num_simulations, degree_exploration, temperature, neural_network, 
              e_greedy, evaluation_interval, evaluation_iterations, evaluation_agent_class, evaluation_agent_arguments, 
              temperature_threshold, self_play_training, self_play_interval, self_play_total_games, 
-             self_play_threshold, checkpoint_filepath, worker_manager):
+             self_play_threshold, checkpoint_filepath, worker_manager, training_buffer_size):
     
     if self_play_training:
         assert self_play_threshold <= self_play_total_games, 'Self-play threshold must be less than self-play games'
@@ -28,8 +60,8 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
 
     historic = []
     total_episodes_done = 0
+    training_examples = CircularArray(training_buffer_size)
     for i in range(1, num_iterations + 1):
-        training_examples = []
         old_neural_network = neural_network.copy()
 
         logging.info(f'Iteration {i}/{num_iterations}: Starting iteration')
@@ -46,11 +78,11 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
                            neural_network, degree_exploration, num_simulations, 
                            temperature, e_greedy)
         
-
-        for training_example in worker_manager.get_results():
+        episode_examples = worker_manager.get_results()
+        for training_example in episode_examples:
             training_examples.extend(training_example)
 
-        total_episodes_done += len(training_examples)
+        total_episodes_done += len(episode_examples)
 
         logging.info(f'Iteration {i}/{num_iterations}: All episodes finished')
         
@@ -231,6 +263,9 @@ if __name__ == '__main__':
     parser.add_argument('-g', '--e-greedy', default=0.9, type=float, help='e constant used in e-greedy')
 
     parser.add_argument('-n', '--network-type', default=1, choices=(1, 2), help='1- OthelloNN, 2- BaseNN')
+    
+    # Default 3x iterations of Othello 6x6
+    parser.add_argument('-bf', '--buffer-size', default=8 * 32 * 3, type=int, help='Training buffer size')
 
     parser.add_argument('-sp', '--self-play', default=False, action='store_true', help='Do self-play at end of each iteration')
     parser.add_argument('-si', '--self-play-interval', default=1, type=int, help='Number of iterations between self-play games')
@@ -319,4 +354,4 @@ if __name__ == '__main__':
             temperature_threshold=args.temperature_threshold, self_play_training=args.self_play, 
             self_play_interval=args.self_play_interval, self_play_total_games=args.self_play_games, 
             self_play_threshold=args.self_play_threshold, worker_manager=worker_manager, 
-            checkpoint_filepath=args.output_file)
+            checkpoint_filepath=args.output_file, training_buffer_size=args.buffer_size)

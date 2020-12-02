@@ -1,13 +1,10 @@
 import os
-import numpy
 import random
 import logging
 import argparse
 
 import gcloud
 import googleapiclient.discovery
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
 
@@ -17,19 +14,22 @@ DEFAULT_CHECKPOINT_FILEPATH = './othelo_model_weights.h5'
 
 class CircularArray:
     def __init__(self, max_):
-        self._list = numpy.empty(max_, dtype=object)
+        self._list = []
+        self._max = max_
         self._index = 0
 
     def append(self, item):
-        self._list[self._index % self._list.size] = item
-        self._index = (self._index % self._list.size) + 1
+        if len(self._list) < self._max:
+            return self._list.append(item)
+        self._list[self._index % len(self._list)] = item
+        self._index = (self._index % len(self._list)) + 1
     
     def extend(self, items):
         for item in items:
             self.append(item)
     
     def __len__(self):
-        return self._list.size
+        return len(self._list)
 
     def __getitem__(self, *args):
         return self._list.__class__.__getitem__(self._list, *args)
@@ -44,7 +44,7 @@ class CircularArray:
         return str(self._list)
 
     def __repr__(self):
-        return '{}({})'.format(self.__class__.__name__, repr(self._list.size))
+        return '{}({})'.format(self.__class__.__name__, repr(len(self._list)))
 
 
 def training(board_size, num_iterations, num_episodes, num_simulations, degree_exploration, temperature, neural_network, 
@@ -264,8 +264,8 @@ if __name__ == '__main__':
 
     parser.add_argument('-n', '--network-type', default=1, choices=(1, 2), help='1- OthelloNN, 2- BaseNN')
     
-    # Default 3x iterations of Othello 6x6
-    parser.add_argument('-bf', '--buffer-size', default=8 * 32 * 3, type=int, help='Training buffer size')
+    # Default 3x 100 iterations of 6x6 Othello
+    parser.add_argument('-bf', '--buffer-size', default=8 * 32 * 100 * 3, type=int, help='Training buffer size')
 
     parser.add_argument('-sp', '--self-play', default=False, action='store_true', help='Do self-play at end of each iteration')
     parser.add_argument('-si', '--self-play-interval', default=1, type=int, help='Number of iterations between self-play games')

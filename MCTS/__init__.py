@@ -68,7 +68,7 @@ class MCTS:
             self._Qsa[hash_][action] = (self._N(hash_, action) * self._Q(hash_, action) + value) / (self._N(hash_, action) + 1)
             self._Nsa[hash_][action] += 1
             self._Ns[hash_] += 1
-            return value
+            return -value
     
     def N(self, state, action=None):
         """Get number of visits during MCTS simulations

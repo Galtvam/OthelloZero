@@ -4,7 +4,6 @@ Imports
 """
 import numpy as np
 import os
-import datetime
 import tensorflow as tf
 
 from enum import Enum, auto

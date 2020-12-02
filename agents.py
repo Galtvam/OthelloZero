@@ -80,4 +80,5 @@ def duel_between_agents(game, agent_1, agent_2):
         agent = players_agents[game.current_player]
         agent.play()
 
-    return players_agents[game.get_winning_player()[0]]
+    winner, points = game.get_winning_player()
+    return players_agents[winner], points

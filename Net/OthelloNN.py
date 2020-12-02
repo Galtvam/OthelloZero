@@ -47,8 +47,8 @@ class OthelloNN:
     h_conv4_flat = Flatten()(h_conv4)       
     s_fc1 = Dropout(self.dropout)(Activation('relu')(BatchNormalization(axis=1)(Dense(1024)(h_conv4_flat)))) 
     s_fc2 = Dropout(self.dropout)(Activation('relu')(BatchNormalization(axis=1)(Dense(512)(s_fc1))))          
-    pi = Dense(self.action_size, activation='softmax')(s_fc2)
-    self.pi = Reshape((self.board_x, self.board_y), name='pi')(pi)  
+    pi = Dense(self.action_size, activation='softmax', name='pi')(s_fc2)
+    self.pi = Reshape((self.board_x, self.board_y), name='pi-reshaped')(pi)
     self.v = Dense(1, activation='tanh', name='v')(s_fc2)
 
     self.model = Model(inputs=self.input_boards, outputs=[self.pi, self.v])

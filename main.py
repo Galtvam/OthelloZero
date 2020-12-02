@@ -6,6 +6,12 @@ import argparse
 import gcloud
 import googleapiclient.discovery
 
+from othelo_mcts import *
+from Othello import *
+from agents import *
+
+#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
 
 LOG_FORMAT = '[%(threadName)s] %(asctime)s %(levelname)s: %(message)s'
@@ -61,8 +67,8 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
     historic = []
     total_episodes_done = 0
     training_examples = CircularArray(training_buffer_size)
+    old_neural_network = neural_network.copy()
     for i in range(1, num_iterations + 1):
-        old_neural_network = neural_network.copy()
 
         logging.info(f'Iteration {i}/{num_iterations}: Starting iteration')
         
@@ -134,6 +140,7 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
                 
                 neural_network.save_checkpoint(checkpoint_filepath)
                 logging.info(f'Iteration {i}/{num_iterations}: Saving trained model in "{checkpoint_filepath}"')
+                old_neural_network = neural_network
             else:
                 neural_network = old_neural_network
                 logging.info(f'Iteration {i}/{num_iterations}: New neural network has not been promoted')
@@ -141,7 +148,6 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
             neural_network.save_checkpoint(checkpoint_filepath)
 
         if i % evaluation_interval == 0:
-            color = [OthelloPlayer.BLACK, OthelloPlayer.WHITE]
             net_wins = 0
             net_black_win = 0
             net_white_win = 0
@@ -156,28 +162,27 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
 
             logging.info(f'New Neural Network evaluation!')
 
-            for k in range(random_agent_fights):
-                random.shuffle(color)
+            for k in range(evaluation_iterations):
                 game = OthelloGame(board_size, current_player = OthelloPlayer.BLACK)
-                neural_networks_mcts = OthelloMCTS(board_size, neural_network, degree_exploration=1)
+                nn_agent = NeuralNetworkOthelloAgent(game, neural_network, num_simulations, degree_exploration)
+                random_agent = RandomOthelloAgent(game)
 
-                while not game.has_finished():
-                    #neural network move
-                    if game.current_player is color[0]:
-                        machine_move(game, neural_networks_mcts, num_simulations)
+                agents = [nn_agent, random_agent]
+                random.shuffle(agents)
 
-                    #random agent move
-                    else:
-                        random_agent(game)
-                
-                winner, points = game.get_winning_player()       
+                agent_winner, points = duel_between_agents(game, *agents)
+
+                if agents[0] is agent_winner:
+                    winner = OthelloPlayer.BLACK
+                else:
+                    winner = OthelloPlayer.WHITE
+                     
                 logging.info(f'The player {winner} won with {points} points')
                 
                 
-
-                if winner == color[0]:
+                if agent_winner is nn_agent:
                     net_wins += 1
-                    if color[0] == OthelloPlayer.BLACK:
+                    if winner == OthelloPlayer.BLACK:
                         black_games += 1
                         net_black_win += 1
                     else:
@@ -185,7 +190,7 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
                         net_white_win += 1
                     logging.info(f'Total Episodes Runned: {total_episodes_done} - Network won: {net_wins}/{k+1} =>  {round((net_wins/(k+1)), 2)} win rate, black: {net_black_win}/{black_games} , white: {net_white_win}/{white_games} ')
                 else:
-                    if color[0] == OthelloPlayer.BLACK:
+                    if winner == OthelloPlayer.BLACK:
                         black_games += 1
                     else:
                         white_games += 1
@@ -194,27 +199,27 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
 
             logging.info(f'Old Neural Network evaluation!')
 
-            for k in range(random_agent_fights):
-                random.shuffle(color)
-                game = OthelloGame(board_size, current_player = OthelloPlayer.BLACK)
-                old_neural_networks_mcts = OthelloMCTS(board_size, old_neural_network, degree_exploration=1)
+            for k in range(evaluation_iterations):
+                game = OthelloGame(board_size)
+                nn_agent = NeuralNetworkOthelloAgent(game, old_neural_network, num_simulations, degree_exploration)
+                random_agent = RandomOthelloAgent(game)
 
-                while not game.has_finished():
-                    #neural network move
-                    if game.current_player is color[0]:
-                        machine_move(game, old_neural_networks_mcts, num_simulations)
+                agents = [nn_agent, random_agent]
+                random.shuffle(agents)
 
-                    #random agent move
-                    else:
-                        random_agent(game)
-                
-                winner, points = game.get_winning_player()       
+                agent_winner, points = duel_between_agents(game, *agents)
+
+                if agents[0] is agent_winner:
+                    winner = OthelloPlayer.BLACK
+                else:
+                    winner = OthelloPlayer.WHITE
+
                 logging.info(f'The player {winner} won with {points} points')
 
 
-                if winner == color[0]:
+                if agent_winner is nn_agent:
                     old_net_wins += 1
-                    if color[0] == OthelloPlayer.BLACK:
+                    if winner == OthelloPlayer.BLACK:
                         old_black_games += 1
                         old_net_black_win += 1
                     else:
@@ -222,7 +227,7 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
                         old_net_white_win += 1
                     logging.info(f'Total Episodes Runned: {total_episodes_done} - Old Network won: {old_net_wins}/{k+1} =>  {round((old_net_wins/(k+1)), 2)} win rate, black: {old_net_black_win}/{old_black_games} , white: {old_net_white_win}/{old_white_games} ')
                 else:
-                    if color[0] == OthelloPlayer.BLACK:
+                    if winner == OthelloPlayer.BLACK:
                         old_black_games += 1
                     else:
                         old_white_games += 1
@@ -232,12 +237,13 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
 
             if net_wins > (old_net_wins * 1.1):
                 logging.info("Saving new network!")
-                historic.append( (total_episodes_done, (net_wins/random_agent_fights)) )
+                historic.append( (total_episodes_done, (net_wins/evaluation_iterations)) )
                 logging.info(historic)
                 neural_network.save_checkpoint(checkpoint_filepath)
+                old_neural_network = neural_network
             else:
                 logging.info("Saving old network!")
-                historic.append( (total_episodes_done, (old_net_wins/random_agent_fights)) )
+                historic.append( (total_episodes_done, (old_net_wins/evaluation_iterations)) )
                 logging.info(historic)
                 old_neural_network.save_checkpoint(checkpoint_filepath)
                 neural_network = old_neural_network

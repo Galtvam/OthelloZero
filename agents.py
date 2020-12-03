@@ -28,17 +28,17 @@ class GreedyOthelloAgent(OthelloAgent):
     def play(self):
         move_points = {}
         possible_moves = tuple(self.game.get_valid_actions())
-        points_before = game.get_players_points()[game.current_player]
-        board = self.game.board(BoardView)
+        points_before = self.game.get_players_points()[self.game.current_player]
+        board = self.game.board(BoardView.TWO_CHANNELS)
         
         for move in possible_moves:
-            state = np.copy(self.game.board(BoardView))
-            OthelloGame.flip_board_squares(state, game.current_playe, *move)
+            state = np.copy(board)
+            OthelloGame.flip_board_squares(state, self.game.current_player, *move)
             points = OthelloGame.get_board_players_points(state)[OthelloPlayer.BLACK] - points_before
-            move_points[move] = points
+            move_points[tuple(move)] = points
         
         greedy_move = max(move_points, key=move_points.get)
-        game.play(*greedy_move)
+        self.game.play(*greedy_move)
 
 
 class NeuralNetworkOthelloAgent(OthelloAgent):

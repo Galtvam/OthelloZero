@@ -87,6 +87,9 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
         episode_examples = worker_manager.get_results()
         for training_example in episode_examples:
             training_examples.extend(training_example)
+        
+        with open(f'examples-{board_size}.txt', 'w') as output:
+            output.write(str(training_examples))
 
         total_episodes_done += len(episode_examples)
 
@@ -249,9 +252,6 @@ def training(board_size, num_iterations, num_episodes, num_simulations, degree_e
                 neural_network = old_neural_network
         
         logging.info(f'Total episodes done: {total_episodes_done}')
-
-        with open(f'examples-{board_size}.txt', 'w') as output:
-            output.write(str(training_examples))
 
         with open(f'historic-last-training-session-{board_size}.txt', 'w') as output:
             output.write(str(historic))

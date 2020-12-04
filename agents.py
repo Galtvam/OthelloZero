@@ -30,14 +30,15 @@ class GreedyOthelloAgent(OthelloAgent):
         possible_moves = tuple(self.game.get_valid_actions())
         points_before = self.game.get_players_points()[self.game.current_player]
         board = self.game.board(BoardView.TWO_CHANNELS)
+        c_player = self.game.current_player
         
-        for move in possible_moves:
-            state = np.copy(board)
+        for i, move in enumerate( possible_moves):
+            state = np.copy(self.game.board(BoardView.TWO_CHANNELS))
             OthelloGame.flip_board_squares(state, self.game.current_player, *move)
-            points = OthelloGame.get_board_players_points(state)[OthelloPlayer.BLACK] - points_before
-            move_points[tuple(move)] = points
+            points = OthelloGame.get_board_players_points(state)[c_player] - points_before
+            move_points[i] = points
         
-        greedy_move = max(move_points, key=move_points.get)
+        greedy_move = possible_moves[max(move_points, key=move_points.get)]
         self.game.play(*greedy_move)
 
 

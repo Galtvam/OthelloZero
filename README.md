@@ -1,6 +1,7 @@
 [![license](https://img.shields.io/badge/license-GPL%20v3.0-brightgreen.svg?style=flat-square)](https://github.com/Galtvam/OthelloZero/blob/main/LICENSE)
 ![LastCommit](https://img.shields.io/github/last-commit/Galtvam/OthelloZero?style=flat-square)
 ![CommitSinceLastversion](https://img.shields.io/github/commits-since/Galtvam/OthelloZero/v0.1-alpha?include_prereleases)
+[![CodeFactor](https://www.codefactor.io/repository/github/galtvam/othellozero/badge/main)](https://www.codefactor.io/repository/github/galtvam/othellozero/overview/main)
 # OthelloZero
 
 ## How to create SSH private key:
